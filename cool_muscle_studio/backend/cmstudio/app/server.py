@@ -88,7 +88,10 @@ async def ingress_guard(request: web.Request, handler):
         peer = request.remote or ""
         if peer != INGRESS_GATEWAY and not peer.startswith("127."):
             raise web.HTTPForbidden(text="accès réservé à la passerelle ingress de Home Assistant")
-    return await handler(request)
+    response = await handler(request)
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"  # revalidation à chaque chargement (ETag/Last-Modified)
+    return response
 
 
 def _user(request: web.Request) -> str | None:
@@ -106,7 +109,10 @@ async def index(request: web.Request) -> web.Response:
     if ingress_path and not request.path.endswith("/") and request.path == "":
         raise web.HTTPFound(ingress_path + "/")
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    return web.Response(text=html, content_type="text/html", charset="utf-8")
+    # cache-busting : chaque version charge ses propres CSS/JS (sinon le navigateur garde l'ancien style)
+    html = re.sub(r'(static/[\w.-]+\.(?:css|js|svg))"', rf"\1?v={__version__}\"", html)
+    return web.Response(text=html, content_type="text/html", charset="utf-8",
+                        headers={"Cache-Control": "no-cache"})
 
 
 async def api_info(request: web.Request) -> web.Response:

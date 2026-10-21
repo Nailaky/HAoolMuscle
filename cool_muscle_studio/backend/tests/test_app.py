@@ -53,9 +53,12 @@ def test_info_reference_and_state(tmp_path):
             r = await client.get("/api/ponts/inconnu")
             assert r.status == 404
             r = await client.get("/")
-            assert r.status == 200 and "Cool Muscle Studio" in await r.text()
+            html = await r.text()
+            assert r.status == 200 and "Cool Muscle Studio" in html
+            assert "static/style.css?v=" in html and "static/app.js?v=" in html  # cache-busting par version
+            assert r.headers["Cache-Control"] == "no-cache"
             r = await client.get("/static/app.js")
-            assert r.status == 200
+            assert r.status == 200 and r.headers["Cache-Control"] == "no-cache"
         finally:
             await _teardown(sim, client)
 

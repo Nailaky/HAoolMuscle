@@ -1,5 +1,10 @@
 # Journal des modifications
 
+## 0.4.1 (2026-10-21)
+
+- Les fichiers CSS/JS sont versionnés et non mis en cache sans revalidation :
+  une mise à jour de l'app ne laisse plus l'ancien style dans le navigateur.
+
 ## 0.4.0 (2026-10-21)
 
 - Nouvelle interface : en-tête avec logo, cartes, menu « Panneaux » pour
