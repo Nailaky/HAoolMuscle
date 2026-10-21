@@ -33,10 +33,12 @@ class Event:
     mode: str | None = None
     busy: bool | None = None
     code: str | None = None
+    extra: dict[str, Any] | None = None  # données supplémentaires (ex. état d'un transfert)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
-        return {k: v for k, v in d.items() if v is not None and v != ""} | {"line": self.line}
+        extra = d.pop("extra", None) or {}
+        return {k: v for k, v in d.items() if v is not None and v != ""} | {"line": self.line} | extra
 
 
 @dataclass

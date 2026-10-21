@@ -35,6 +35,26 @@ depuis Home Assistant, via un pont ESP32-S3 (ESPHome, composant `cm1_bridge`).
   demandent une confirmation, sauf en mode expert. Toutes les écritures sont
   journalisées dans `<dossier>/journal/AAAA-MM.jsonl`.
 
+## Fichier CML
+
+Le panneau « Fichier CML » accepte un fichier `.cml`, `.cmp` ou `.txt`. Il
+est d'abord analysé : commentaires retirés, `#define` et `var` remplacés,
+constantes dans les banques hissées dans des registres N libres (comme le
+fait Control Room), puis chaque ligne est validée (plages des K, indices des
+registres, structure des banques, 40 caractères, 200 pas). Les erreurs
+bloquent l'envoi ; les avertissements (K37, paramètres de liaison, absence de
+`$`) sont affichés.
+
+L'envoi exige le mode maintenance. Chaque ligne est envoyée puis confirmée par
+l'écho du moteur avant la suivante ; sans écho dans les 2 secondes (3 pour
+`$`), ou si le pont refuse la ligne, le transfert s'arrête et indique la
+dernière ligne confirmée. « Annuler » arrête proprement après la ligne en
+cours. Toutes les lignes sont journalisées avec le nom du fichier.
+
+Vérification après transfert : pour l'instant manuelle (`?1000.1`, `?90.1`
+dans le terminal) ; la relecture automatique et la comparaison arrivent à
+l'étape 3.
+
 ## Mode maintenance
 
 Pendant le mode maintenance, l'ESP32 ignore les commandes du robot et ne

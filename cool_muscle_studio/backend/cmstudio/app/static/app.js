@@ -61,6 +61,7 @@
       case "refused": return "REFUS";
       case "err": return "ERREUR";
       case "conn": return "PONT";
+      case "transfert": return "FICHIER";
       default: return ev.type.toUpperCase();
     }
   }
@@ -70,6 +71,7 @@
       case "refused": return `maintenance refusée : ${{ MOVING: "mouvement en cours", STARTUP: "démarrage en cours", ALARM: "moteur en alarme" }[ev.line] || ev.line}`;
       case "err": return `${ev.code} ${ev.line}`;
       case "conn": return ev.origin === "connecte" ? "connecté au pont" : "déconnecté du pont";
+      case "transfert": return `${ev.nom} : ${{ en_attente: "en attente", en_cours: "en cours", termine: "terminé", annule: "annulé", erreur: "erreur" }[ev.etat] || ev.etat} ${ev.index}/${ev.total}${ev.erreur ? " — " + ev.erreur : ""}`;
       default: return ev.line;
     }
   }
@@ -91,6 +93,10 @@
     return div;
   }
   function appendEvent(ev) {
+    if (ev.type === "transfert") {
+      updateTransfer(ev);
+      if (ev.etat === "en_cours" && ev.index > 0) return;  // la progression est dans le panneau, pas dans le journal
+    }
     state.events.push(ev);
     if (state.events.length > MAX_LINES) state.events.shift();
     const log = $("log");
@@ -330,6 +336,57 @@
     URL.revokeObjectURL(a.href);
   }
 
+  // ------------------------------------------------------------ fichier CML
+  const file = { nom: null, contenu: null, analyse: null, enCours: false };
+  function updateTransfer(ev) {
+    const bar = $("file-bar");
+    $("file-progress").classList.remove("hidden");
+    bar.max = ev.total || 1;
+    bar.value = ev.index || 0;
+    const etat = { en_attente: "en attente", en_cours: "en cours", termine: "terminé", annule: "annulé", erreur: "erreur" }[ev.etat] || ev.etat;
+    $("file-status").innerHTML = `<b>${CML.esc(ev.nom || "")}</b> : ${etat}, ${ev.index}/${ev.total}` +
+      (ev.ligne_courante ? ` <code>${CML.esc(ev.ligne_courante)}</code>` : "") +
+      (ev.erreur ? `<div class="err-text">${CML.esc(ev.erreur)}</div>` : "") +
+      (ev.etat === "termine" ? '<div class="warn">Terminé. La relecture de vérification (?1000) arrivera à l\'étape 3 : pensez à vérifier manuellement.</div>' : "");
+    file.enCours = ev.etat === "en_cours" || ev.etat === "en_attente";
+    $("file-cancel").classList.toggle("hidden", !file.enCours);
+    $("file-send").disabled = file.enCours || !file.analyse || file.analyse.erreurs > 0;
+    if (!file.enCours) loadJournal();
+  }
+  async function analyseFile(f) {
+    file.nom = f.name;
+    file.contenu = await f.text();
+    try {
+      file.analyse = await postJSON("api/fichier/analyser", { nom: f.name, contenu: file.contenu });
+    } catch (e) { $("file-info").textContent = e.message; return; }
+    const a = file.analyse;
+    $("file-info").innerHTML = `<b>${CML.esc(a.nom)}</b> : ${a.nb_lignes} ligne(s) à envoyer, banques ${a.banques.length ? a.banques.map(CML.esc).join(", ") : "aucune"}, ${a.ecritures_k.length} écriture(s) K` +
+      (a.k37 ? ' <span class="warn">— modifie K37 (unités de tous les registres)</span>' : "") +
+      (a.sauvegarde ? "" : ' <span class="warn">— pas de $ : rien ne sera conservé après coupure</span>') +
+      (a.erreurs ? ` <span class="err-text">— ${a.erreurs} erreur(s), envoi bloqué</span>` : "");
+    const ul = $("file-diags");
+    ul.innerHTML = a.diagnostics.map((d) => `<li class="${d.severite === "erreur" ? "err-text" : d.severite === "avertissement" ? "warn" : "muted"}">ligne ${d.ligne} [${d.code}] ${CML.esc(d.message)}</li>`).join("");
+    ul.classList.toggle("hidden", !a.diagnostics.length);
+    $("file-actions").classList.remove("hidden");
+    $("file-send").disabled = a.erreurs > 0 || file.enCours;
+    $("file-progress").classList.add("hidden");
+  }
+  async function sendFile() {
+    const a = file.analyse;
+    if (!a) return;
+    if (!state.pont || state.pont.mode !== "MAINT") { notify("le pont doit être en mode maintenance pour recevoir un fichier", true); return; }
+    $("confirm-title").textContent = "Envoyer ce fichier au moteur ?";
+    $("confirm-text").textContent = `${a.nb_lignes} ligne(s) seront envoyées une par une et confirmées par l'écho. Banques : ${a.banques.join(", ") || "aucune"}. Écritures K : ${a.ecritures_k.join(", ") || "aucune"}.`;
+    $("confirm-line").textContent = a.lignes.slice(0, 12).map((l) => l.texte).join("\n") + (a.lignes.length > 12 ? "\n…" : "");
+    $("confirm-warn").textContent = a.k37 ? "Ce fichier modifie K37 : les unités de tous les registres changent." : "";
+    $("confirm-warn").classList.toggle("hidden", !a.k37);
+    const ok = await new Promise((resolve) => { const dlg = $("confirm"); dlg.returnValue = "cancel"; dlg.onclose = () => resolve(dlg.returnValue === "ok"); dlg.showModal(); });
+    if (!ok) return;
+    try {
+      await postJSON(`api/ponts/${state.slug}/transfert`, { nom: a.nom, contenu: file.contenu, attendre_echo: $("file-echo").checked });
+    } catch (e) { notify(`transfert refusé : ${e.message}`, true); }
+  }
+
   // ------------------------------------------------------------ initialisation
   function selectBridge(slug) {
     state.slug = slug;
@@ -388,6 +445,9 @@
     $("maint-btn").onclick = toggleMaint;
     $("detect-btn").onclick = detect;
     $("clear-btn").onclick = () => { state.events = []; $("log").innerHTML = ""; };
+    $("file-input").onchange = () => { if ($("file-input").files[0]) analyseFile($("file-input").files[0]); };
+    $("file-send").onclick = sendFile;
+    $("file-cancel").onclick = () => postJSON(`api/ponts/${state.slug}/transfert/annuler`).catch((e) => notify(e.message, true));
     $("export-btn").onclick = exportLog;
     for (const id of ["f-local", "f-echo"]) $(id).onchange = rerender;
     $("f-search").oninput = rerender;

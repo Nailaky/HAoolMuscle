@@ -1,5 +1,5 @@
 name: Cool Muscle Studio
-version: 0.1.1
+version: 0.2.0
 slug: cool_muscle_studio
 description: Configuration, programmation et diagnostic des servomoteurs Cool Muscle CM1 via un pont ESP32
 url: https://github.com/Nailaky/HAoolMuscle

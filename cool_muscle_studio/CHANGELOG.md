@@ -1,5 +1,15 @@
 # Journal des modifications
 
+## 0.2.0 (2026-10-21)
+
+- Panneau « Fichier CML » : import d'un fichier `.cml`, `.cmp` ou `.txt`,
+  prétraitement CMP (commentaires, `#define`, `var`, constantes dans les
+  banques hissées dans des registres N comme Control Room), analyse et
+  validation, puis envoi ligne par ligne en mode maintenance avec accusé par
+  l'écho du moteur, barre de progression, annulation et journal. Le transfert
+  s'arrête à la première ligne non confirmée et indique le nombre de lignes
+  confirmées. La relecture de vérification arrivera à l'étape 3.
+
 ## 0.1.1 (2026-10-21)
 
 - Images pré-construites (amd64, aarch64) publiées sur ghcr.io par GitHub

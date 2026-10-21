@@ -51,6 +51,21 @@
   </section>
 
   <aside class="side">
+    <h2>Fichier CML</h2>
+    <input type="file" id="file-input" accept=".cml,.cmp,.txt" class="small">
+    <div id="file-info" class="small muted">Choisir un fichier .cml, .cmp ou .txt : il est analysé avant tout envoi.</div>
+    <ul id="file-diags" class="list small hidden"></ul>
+    <div id="file-actions" class="hidden">
+      <label class="small"><input type="checkbox" id="file-echo" checked> attendre l'écho de chaque ligne</label>
+      <div class="row">
+        <button id="file-send" class="btn primary small">Envoyer au moteur</button>
+        <button id="file-cancel" class="btn small hidden">Annuler</button>
+      </div>
+    </div>
+    <div id="file-progress" class="hidden">
+      <progress id="file-bar" value="0" max="1"></progress>
+      <div id="file-status" class="small"></div>
+    </div>
     <h2>Moteurs détectés</h2>
     <ul id="motors" class="list"><li class="muted">aucune détection lancée</li></ul>
     <h2>Dernières écritures</h2>

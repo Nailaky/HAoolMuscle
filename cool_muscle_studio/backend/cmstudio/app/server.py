@@ -22,6 +22,7 @@ from ..sim.server import is_read_only
 from .bridge_client import BridgeClient
 from .config import AppConfig, BridgeConfig
 from .journal import Journal
+from .transfer import Transfer, analyse
 
 log = logging.getLogger("cmstudio.app")
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -39,6 +40,7 @@ class Studio:
             self.add_bridge(b)
         self.journal = Journal(config.dossier)
         self.reference = load_reference()
+        self.transfers: dict[str, Transfer] = {}
 
     def add_bridge(self, b: BridgeConfig) -> BridgeClient:
         client = BridgeClient(b.nom, b.hote, b.port)
@@ -196,6 +198,56 @@ async def api_detect(request: web.Request) -> web.Response:
     return web.json_response({"moteurs": found})
 
 
+async def api_fichier_analyser(request: web.Request) -> web.Response:
+    """Analyse un fichier CML/CMP (contenu envoyé en JSON) sans rien envoyer au moteur."""
+    studio: Studio = request.app["studio"]
+    data = await request.json()
+    contenu = str(data.get("contenu", ""))
+    if len(contenu) > 200_000:
+        raise web.HTTPBadRequest(text="fichier trop volumineux")
+    an = analyse(str(data.get("nom", "fichier.cml")), contenu, studio.reference)
+    return web.json_response(an.to_dict())
+
+
+async def api_transfert_start(request: web.Request) -> web.Response:
+    studio: Studio = request.app["studio"]
+    slug = request.match_info["slug"]
+    c = studio.bridge(slug)
+    data = await request.json()
+    if not c.state.connected:
+        raise web.HTTPServiceUnavailable(text="pont non connecté")
+    if c.state.mode != "MAINT":
+        raise web.HTTPConflict(text="le pont doit être en mode maintenance pour recevoir un fichier")
+    current = studio.transfers.get(slug)
+    if current is not None and current.running:
+        raise web.HTTPConflict(text="un transfert est déjà en cours")
+    an = analyse(str(data.get("nom", "fichier.cml")), str(data.get("contenu", "")), studio.reference)
+    if not an.lignes:
+        raise web.HTTPBadRequest(text="aucune ligne à envoyer")
+    if any(d.severity == "erreur" for d in an.diagnostics) and not data.get("forcer"):
+        return web.json_response({"ok": False, "analyse": an.to_dict()}, status=400)
+    t = Transfer(c, an, attendre_echo=bool(data.get("attendre_echo", True)), journal=studio.journal, utilisateur=_user(request))
+    studio.transfers[slug] = t
+    studio.journal.write(c.name, f"TRANSFERT {an.nom} ({len(an.lignes)} lignes)", _user(request), origine="fichier")
+    t.start()
+    return web.json_response({"ok": True, "transfert": t.state.to_dict()})
+
+
+async def api_transfert_state(request: web.Request) -> web.Response:
+    studio: Studio = request.app["studio"]
+    t = studio.transfers.get(request.match_info["slug"])
+    return web.json_response(t.state.to_dict() if t else None)
+
+
+async def api_transfert_cancel(request: web.Request) -> web.Response:
+    studio: Studio = request.app["studio"]
+    t = studio.transfers.get(request.match_info["slug"])
+    if t is None or not t.running:
+        raise web.HTTPConflict(text="aucun transfert en cours")
+    t.cancel()
+    return web.json_response({"ok": True})
+
+
 async def api_journal(request: web.Request) -> web.Response:
     studio: Studio = request.app["studio"]
     return web.json_response(studio.journal.read(int(request.query.get("limit", "200"))))
@@ -245,6 +297,10 @@ def create_app(config: AppConfig, studio: Studio | None = None) -> web.Applicati
     app.router.add_post("/api/ponts/{slug}/maintenance", api_maint)
     app.router.add_post("/api/ponts/{slug}/detecter", api_detect)
     app.router.add_get("/api/ponts/{slug}/ws", ws_terminal)
+    app.router.add_post("/api/fichier/analyser", api_fichier_analyser)
+    app.router.add_post("/api/ponts/{slug}/transfert", api_transfert_start)
+    app.router.add_get("/api/ponts/{slug}/transfert", api_transfert_state)
+    app.router.add_post("/api/ponts/{slug}/transfert/annuler", api_transfert_cancel)
     app.router.add_get("/api/journal", api_journal)
     app.router.add_static("/static", STATIC_DIR, show_index=False)
 

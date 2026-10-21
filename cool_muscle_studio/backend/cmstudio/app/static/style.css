@@ -76,4 +76,9 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 dialog pre { background: var(--log-bg); color: var(--log-fg); padding: 8px; border-radius: 4px; font-family: ui-monospace, Consolas, monospace; }
 dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; margin: 0; }
 .warn { color: var(--warn); font-weight: 600; }
+.err-text { color: var(--danger); }
+.row { display: flex; gap: 6px; margin-top: 4px; }
+progress { width: 100%; height: 12px; }
+#file-diags li { border: none; padding: 1px 0; }
+.line.transfert { color: var(--c-local); font-style: italic; }
 .expert { margin-left: auto; }
