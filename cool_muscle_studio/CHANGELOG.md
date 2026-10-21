@@ -1,5 +1,13 @@
 # Journal des modifications
 
+## 0.4.0 (2026-10-21)
+
+- Nouvelle interface : en-tête avec logo, cartes, menu « Panneaux » pour
+  afficher ou masquer chaque section (Commandes rapides, Configuration,
+  Fichier CML, Moteurs détectés, Dernières écritures, Aide), sections
+  repliables ; les choix sont mémorisés par navigateur. Thème clair et sombre.
+- Icône et logo de l'app dans Home Assistant.
+
 ## 0.3.2 (2026-10-21)
 
 - Export : analyse du vrai format de `?1000` (en-têtes de banque sans `END`,

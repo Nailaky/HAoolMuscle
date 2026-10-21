@@ -22,6 +22,13 @@ depuis Home Assistant, via un pont ESP32-S3 (ESPHome, composant `cm1_bridge`).
 | `sortie_auto_maintenance_s` | Pour information : le délai de sortie automatique est réglé dans le YAML ESPHome (`maintenance_timeout`). |
 | `mode_expert` | Désactive par défaut les confirmations dans le terminal (chaque navigateur peut aussi le régler). |
 
+## Panneaux
+
+Le menu **Panneaux** (en haut à droite) affiche ou masque chaque section de la
+colonne de droite : Commandes rapides, Configuration du moteur, Fichier CML,
+Moteurs détectés, Dernières écritures, Aide. Un clic sur le titre d'une
+section la replie. Ces choix sont mémorisés dans le navigateur.
+
 ## Terminal
 
 - `↑`/`↓` : historique (conservé par navigateur et par pont) ; `Tab` : accepte

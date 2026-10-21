@@ -117,10 +117,10 @@
     state.pont = p;
     const conn = $("conn-badge");
     conn.textContent = p.connected ? "connecté" : "déconnecté" + (p.last_error ? ` (${p.last_error})` : "");
-    conn.className = "badge " + (p.connected ? "" : "off");
+    conn.className = "chip " + (p.connected ? "" : "off");
     const mode = $("mode-badge");
     mode.textContent = p.mode === "MAINT" ? "MAINTENANCE" : "normal";
-    mode.className = "badge " + (p.mode === "MAINT" ? "maint" : "");
+    mode.className = "chip " + (p.mode === "MAINT" ? "maint" : "");
     $("busy-badge").classList.toggle("hidden", !p.busy);
     $("maint-btn").textContent = p.mode === "MAINT" ? "Quitter la maintenance" : "Mode maintenance";
     $("maint-btn").classList.toggle("active", p.mode === "MAINT");
@@ -491,6 +491,29 @@
     $("cfg-export").disabled = false;
   }
 
+  // ------------------------------------------------------------ panneaux (affichage et repli mémorisés)
+  function setupPanels() {
+    let prefs = {};
+    try { prefs = JSON.parse(localStorage.getItem("cms:panneaux") || "{}"); } catch (e) { prefs = {}; }
+    const save = () => { try { localStorage.setItem("cms:panneaux", JSON.stringify(prefs)); } catch (e) { /* ignoré */ } };
+    document.querySelectorAll("#panels-menu input[data-panel]").forEach((cb) => {
+      const name = cb.dataset.panel;
+      const panel = document.querySelector(`.panel[data-panel="${name}"]`);
+      if (!panel) return;
+      const shown = prefs[name] && typeof prefs[name].visible === "boolean" ? prefs[name].visible : cb.checked;
+      cb.checked = shown;
+      panel.classList.toggle("hidden", !shown);
+      if (prefs[name] && prefs[name].folded) panel.classList.add("folded");
+      cb.onchange = () => { prefs[name] = { ...(prefs[name] || {}), visible: cb.checked }; panel.classList.toggle("hidden", !cb.checked); save(); };
+      const head = panel.querySelector(".panel-head");
+      const fold = panel.querySelector(".fold");
+      const toggleFold = () => { const f = panel.classList.toggle("folded"); fold.textContent = f ? "+" : "–"; prefs[name] = { ...(prefs[name] || {}), visible: cb.checked, folded: f }; save(); };
+      fold.textContent = panel.classList.contains("folded") ? "+" : "–";
+      head.onclick = toggleFold;
+    });
+    document.addEventListener("click", (e) => { const m = $("panels-menu"); if (m.open && !m.contains(e.target)) m.open = false; });
+  }
+
   // ------------------------------------------------------------ initialisation
   function selectBridge(slug) {
     state.slug = slug;
@@ -549,6 +572,7 @@
     $("maint-btn").onclick = toggleMaint;
     $("detect-btn").onclick = detect;
     $("clear-btn").onclick = () => { state.events = []; $("log").innerHTML = ""; };
+    setupPanels();
     bindQuickCommands();
     $("cfg-export").onclick = exportConfig;
     loadBackups();

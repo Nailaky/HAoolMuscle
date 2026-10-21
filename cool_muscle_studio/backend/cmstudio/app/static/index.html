@@ -4,39 +4,61 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cool Muscle Studio</title>
+<link rel="icon" href="static/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">Cool Muscle Studio <span id="version" class="muted"></span></div>
-  <label class="field">Pont
-    <select id="bridge-select"></select>
-  </label>
-  <span id="conn-badge" class="badge off">déconnecté</span>
-  <span id="mode-badge" class="badge">—</span>
-  <span id="busy-badge" class="badge hidden">en mouvement</span>
-  <button id="maint-btn" class="btn" title="Entrer ou sortir du mode maintenance (jamais pendant un mouvement)">Mode maintenance</button>
-  <button id="detect-btn" class="btn" title="Envoie ?85.1 à ?85.15 et liste les moteurs qui répondent">Détecter les moteurs</button>
-  <span id="user" class="muted"></span>
+  <div class="brand">
+    <img src="static/logo.svg" alt="" class="logo">
+    <div>
+      <div class="brand-name">Cool Muscle Studio</div>
+      <div class="brand-sub"><span id="version"></span> · Myostat CM1 via ESP32</div>
+    </div>
+  </div>
+  <div class="topbar-center">
+    <label class="field">Pont
+      <select id="bridge-select"></select>
+    </label>
+    <span id="conn-badge" class="chip off">déconnecté</span>
+    <span id="mode-badge" class="chip">—</span>
+    <span id="busy-badge" class="chip busy hidden">en mouvement</span>
+  </div>
+  <div class="topbar-right">
+    <button id="maint-btn" class="btn" title="Entrer ou sortir du mode maintenance (jamais pendant un mouvement)">Mode maintenance</button>
+    <button id="detect-btn" class="btn" title="Envoie ?85.1 à ?85.15 et liste les moteurs qui répondent">Détecter les moteurs</button>
+    <details class="menu" id="panels-menu">
+      <summary class="btn" title="Afficher ou masquer les panneaux">Panneaux ▾</summary>
+      <div class="menu-body">
+        <label><input type="checkbox" data-panel="qc" checked> Commandes rapides</label>
+        <label><input type="checkbox" data-panel="cfg" checked> Configuration du moteur</label>
+        <label><input type="checkbox" data-panel="file" checked> Fichier CML</label>
+        <label><input type="checkbox" data-panel="motors" checked> Moteurs détectés</label>
+        <label><input type="checkbox" data-panel="journal" checked> Dernières écritures</label>
+        <label><input type="checkbox" data-panel="help"> Aide</label>
+      </div>
+    </details>
+    <span id="user" class="muted small"></span>
+  </div>
 </header>
 
 <div class="estop">
   <button id="estop-btn" class="estop-btn" title="Envoie * : arrêt immédiat de tous les moteurs de la chaîne">■ ARRÊT D'URGENCE</button>
-  <button id="estop-cancel-btn" class="btn" title="Envoie *1 : annule l'arrêt d'urgence (rien ne redémarre)">Annuler l'arrêt (*1)</button>
-  <span id="estop-info" class="muted"></span>
+  <button id="estop-cancel-btn" class="btn ghost" title="Envoie *1 : annule l'arrêt d'urgence (rien ne redémarre)">Annuler l'arrêt (*1)</button>
+  <span id="estop-info" class="muted small"></span>
 </div>
 
 <main class="layout">
-  <section class="terminal">
+  <section class="card terminal">
     <div class="toolbar">
-      <label><input type="checkbox" id="f-local" checked> trafic de l'ESP32</label>
-      <label><input type="checkbox" id="f-echo" checked> échos</label>
-      <label><input type="checkbox" id="f-wrap"> retour à la ligne</label>
+      <label class="chk"><input type="checkbox" id="f-local" checked> trafic de l'ESP32</label>
+      <label class="chk"><input type="checkbox" id="f-echo" checked> échos</label>
+      <label class="chk"><input type="checkbox" id="f-wrap"> retour à la ligne</label>
       <input id="f-search" type="search" placeholder="filtrer…">
       <span class="spacer"></span>
-      <label class="expert"><input type="checkbox" id="expert"> mode expert (sans confirmation)</label>
-      <button id="clear-btn" class="btn small">Effacer</button>
-      <button id="export-btn" class="btn small">Exporter</button>
+      <label class="chk expert"><input type="checkbox" id="expert"> mode expert</label>
+      <button id="clear-btn" class="btn small ghost">Effacer</button>
+      <button id="export-btn" class="btn small ghost">Exporter</button>
     </div>
     <div id="log" class="log" tabindex="0"></div>
     <div class="input-area">
@@ -44,82 +66,106 @@
       <div class="input-row">
         <span class="prompt">&gt;</span>
         <input id="cmd" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="?85.1">
-        <button id="send-btn" class="btn">Envoyer</button>
+        <button id="send-btn" class="btn primary">Envoyer</button>
       </div>
       <ul id="suggest" class="suggest hidden"></ul>
     </div>
   </section>
 
   <aside class="side">
-    <h2>Commandes rapides</h2>
-    <div class="grid small">
-      <label>Moteur <input id="qc-motor" type="number" min="1" max="15" value="1"></label>
-      <button id="qc-k37" class="btn small" title="Lit K37 pour convertir degrés, tr/min et tr/s² en impulsions">Lire K37</button>
-      <span id="qc-units" class="muted">unités inconnues : lire K37</span>
-    </div>
-    <div class="grid small">
-      <label>Vitesse <input id="qc-rpm" type="number" min="0.1" step="1" value="60"> tr/min</label>
-      <label>Accélération <input id="qc-acc" type="number" min="0.1" step="1" value="10"> tr/s²</label>
-      <label>Couple <input id="qc-torque" type="number" min="0" max="100" value="100"> %</label>
-    </div>
-    <div class="grid small">
-      <label>Position <input id="qc-pos" type="number" step="1" value="180"> °</label>
-      <button id="qc-goto" class="btn small primary" title="P0, S0, A0, M0 puis ^ : position absolue">Aller à</button>
-      <button id="qc-read-pos" class="btn small" title="?96 : position courante">Lire la position</button>
-      <span id="qc-pos-read" class="muted"></span>
-    </div>
-    <div class="grid small">
-      <label>Pas <input id="qc-step" type="number" min="0.01" step="1" value="10"> °</label>
-      <button id="qc-jog-minus" class="btn small" title="Déplacement relatif négatif (P0 en résolution 50 000 puis ~)">◀ Jog −</button>
-      <button id="qc-jog-plus" class="btn small" title="Déplacement relatif positif (P0 en résolution 50 000 puis ~)">Jog + ▶</button>
-    </div>
-    <div class="grid small">
-      <span>Rotation continue</span>
-      <button id="qc-run-ccw" class="btn small" title="P0=1000000000 avec vitesse négative puis ^">◀ Sens −</button>
-      <button id="qc-run-cw" class="btn small" title="P0=1000000000 avec vitesse positive puis ^">Sens + ▶</button>
-      <button id="qc-stop" class="btn small" title="] : arrêt du mouvement">■ Stop</button>
-    </div>
-    <div class="grid small">
-      <button id="qc-enable" class="btn small" title="( : activer le moteur">( Activer</button>
-      <button id="qc-disable" class="btn small" title=") : désactiver (arbre libre)">) Désactiver</button>
-      <button id="qc-home" class="btn small" title="| : recherche d'origine (K42..K48)">| Origine</button>
-      <button id="qc-goto0" class="btn small" title="|1 : aller à la position 0">|1 Aller à 0</button>
-      <button id="qc-set0" class="btn small" title="|2 : la position actuelle devient 0">|2 Origine ici</button>
-    </div>
-    <div id="qc-info" class="small muted">Les commandes de mouvement exigent le mode maintenance.</div>
-
-    <h2>Configuration du moteur</h2>
-    <div class="grid small">
-      <button id="cfg-export" class="btn small primary" title="Lit ?85, ?90, les registres et ?1000, puis enregistre un fichier .cml horodaté dans le dossier des sauvegardes">Exporter la configuration</button>
-      <span id="cfg-info" class="muted">lecture seule, possible en mode normal</span>
-    </div>
-    <ul id="cfg-list" class="list small"></ul>
-
-    <h2>Fichier CML</h2>
-    <input type="file" id="file-input" accept=".cml,.cmp,.txt" class="small">
-    <div id="file-info" class="small muted">Choisir un fichier .cml, .cmp ou .txt : il est analysé avant tout envoi.</div>
-    <ul id="file-diags" class="list small hidden"></ul>
-    <div id="file-actions" class="hidden">
-      <label class="small"><input type="checkbox" id="file-echo" checked> attendre l'écho de chaque ligne</label>
-      <div class="row">
-        <button id="file-send" class="btn primary small">Envoyer au moteur</button>
-        <button id="file-cancel" class="btn small hidden">Annuler</button>
+    <section class="card panel" data-panel="qc">
+      <header class="panel-head"><h2>Commandes rapides</h2><button class="fold" title="Replier">–</button></header>
+      <div class="panel-body">
+        <div class="grid small">
+          <label>Moteur <input id="qc-motor" type="number" min="1" max="15" value="1"></label>
+          <button id="qc-k37" class="btn small ghost" title="Lit K37 pour convertir degrés, tr/min et tr/s² en impulsions">Lire K37</button>
+          <span id="qc-units" class="muted">unités inconnues : lire K37</span>
+        </div>
+        <div class="grid small">
+          <label>Vitesse <input id="qc-rpm" type="number" min="0.1" step="1" value="60"> tr/min</label>
+          <label>Accél. <input id="qc-acc" type="number" min="0.1" step="1" value="10"> tr/s²</label>
+          <label>Couple <input id="qc-torque" type="number" min="0" max="100" value="100"> %</label>
+        </div>
+        <div class="grid small">
+          <label>Position <input id="qc-pos" type="number" step="1" value="180"> °</label>
+          <button id="qc-goto" class="btn small primary" title="P0, S0, A0, M0 puis ^ : position absolue">Aller à</button>
+          <button id="qc-read-pos" class="btn small ghost" title="?96 : position courante">Lire la position</button>
+          <span id="qc-pos-read" class="muted"></span>
+        </div>
+        <div class="grid small">
+          <label>Pas <input id="qc-step" type="number" min="0.01" step="1" value="10"> °</label>
+          <button id="qc-jog-minus" class="btn small" title="Déplacement relatif négatif (P0 en résolution 50 000 puis ~)">◀ Jog −</button>
+          <button id="qc-jog-plus" class="btn small" title="Déplacement relatif positif (P0 en résolution 50 000 puis ~)">Jog + ▶</button>
+        </div>
+        <div class="grid small">
+          <span class="muted">Rotation continue</span>
+          <button id="qc-run-ccw" class="btn small" title="P0=1000000000 avec vitesse négative puis ^">◀ Sens −</button>
+          <button id="qc-run-cw" class="btn small" title="P0=1000000000 avec vitesse positive puis ^">Sens + ▶</button>
+          <button id="qc-stop" class="btn small danger" title="] : arrêt du mouvement">■ Stop</button>
+        </div>
+        <div class="grid small">
+          <button id="qc-enable" class="btn small" title="( : activer le moteur">( Activer</button>
+          <button id="qc-disable" class="btn small" title=") : désactiver (arbre libre)">) Désactiver</button>
+          <button id="qc-home" class="btn small" title="| : recherche d'origine (K42..K48)">| Origine</button>
+          <button id="qc-goto0" class="btn small" title="|1 : aller à la position 0">|1 Aller à 0</button>
+          <button id="qc-set0" class="btn small" title="|2 : la position actuelle devient 0">|2 Origine ici</button>
+        </div>
+        <div id="qc-info" class="small muted">Les commandes de mouvement exigent le mode maintenance.</div>
       </div>
-    </div>
-    <div id="file-progress" class="hidden">
-      <progress id="file-bar" value="0" max="1"></progress>
-      <div id="file-status" class="small"></div>
-    </div>
-    <h2>Moteurs détectés</h2>
-    <ul id="motors" class="list"><li class="muted">aucune détection lancée</li></ul>
-    <h2>Dernières écritures</h2>
-    <ul id="journal" class="list small"></ul>
-    <h2>Aide</h2>
-    <p class="muted small">
-      En mode <b>normal</b>, seules les lectures (<code>?96.1</code>, <code>K37.1</code>, <code>_SKH</code>) et l'arrêt d'urgence passent.
-      Le mode <b>maintenance</b> suspend la logique robot de l'ESP32 et donne la main au terminal ; il est refusé pendant un mouvement.
-      Les commandes qui font bouger le moteur ou modifient sa configuration demandent une confirmation (sauf mode expert).
-    </p>
+    </section>
+
+    <section class="card panel" data-panel="cfg">
+      <header class="panel-head"><h2>Configuration du moteur</h2><button class="fold" title="Replier">–</button></header>
+      <div class="panel-body">
+        <div class="grid small">
+          <button id="cfg-export" class="btn small primary" title="Lit ?85, ?90, les registres et ?1000, puis enregistre un fichier .cml horodaté dans le dossier des sauvegardes">Exporter la configuration</button>
+          <span id="cfg-info" class="muted">lecture seule, possible en mode normal</span>
+        </div>
+        <ul id="cfg-list" class="list small"></ul>
+      </div>
+    </section>
+
+    <section class="card panel" data-panel="file">
+      <header class="panel-head"><h2>Fichier CML</h2><button class="fold" title="Replier">–</button></header>
+      <div class="panel-body">
+        <input type="file" id="file-input" accept=".cml,.cmp,.txt" class="small">
+        <div id="file-info" class="small muted">Choisir un fichier .cml, .cmp ou .txt : il est analysé avant tout envoi.</div>
+        <ul id="file-diags" class="list small hidden"></ul>
+        <div id="file-actions" class="hidden">
+          <label class="small chk"><input type="checkbox" id="file-echo" checked> attendre l'écho de chaque ligne</label>
+          <div class="row">
+            <button id="file-send" class="btn primary small">Envoyer au moteur</button>
+            <button id="file-cancel" class="btn small danger hidden">Annuler</button>
+          </div>
+        </div>
+        <div id="file-progress" class="hidden">
+          <progress id="file-bar" value="0" max="1"></progress>
+          <div id="file-status" class="small"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card panel" data-panel="motors">
+      <header class="panel-head"><h2>Moteurs détectés</h2><button class="fold" title="Replier">–</button></header>
+      <div class="panel-body"><ul id="motors" class="list"><li class="muted">aucune détection lancée</li></ul></div>
+    </section>
+
+    <section class="card panel" data-panel="journal">
+      <header class="panel-head"><h2>Dernières écritures</h2><button class="fold" title="Replier">–</button></header>
+      <div class="panel-body"><ul id="journal" class="list small"></ul></div>
+    </section>
+
+    <section class="card panel" data-panel="help">
+      <header class="panel-head"><h2>Aide</h2><button class="fold" title="Replier">–</button></header>
+      <div class="panel-body">
+        <p class="muted small">
+          En mode <b>normal</b>, seules les lectures (<code>?96.1</code>, <code>K37.1</code>, <code>_SKH</code>) et l'arrêt d'urgence passent.
+          Le mode <b>maintenance</b> suspend la logique robot de l'ESP32 et donne la main au terminal ; il est refusé pendant un mouvement.
+          Les commandes qui font bouger le moteur ou modifient sa configuration demandent une confirmation (sauf mode expert).
+          Raccourcis : ↑/↓ historique, Tab complète, Ctrl+Échap arrêt d'urgence.
+        </p>
+      </div>
+    </section>
   </aside>
 </main>
 

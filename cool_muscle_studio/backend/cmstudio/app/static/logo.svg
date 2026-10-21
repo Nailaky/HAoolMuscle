@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Cool Muscle Studio">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)"/>
+  <!-- stator -->
+  <circle cx="32" cy="32" r="18" fill="none" stroke="#ffffff" stroke-width="4"/>
+  <!-- encoches -->
+  <g stroke="#ffffff" stroke-width="3" stroke-linecap="round">
+    <line x1="32" y1="8" x2="32" y2="13"/>
+    <line x1="32" y1="51" x2="32" y2="56"/>
+    <line x1="8" y1="32" x2="13" y2="32"/>
+    <line x1="51" y1="32" x2="56" y2="32"/>
+  </g>
+  <!-- arbre -->
+  <circle cx="32" cy="32" r="5" fill="#ffffff"/>
+  <!-- courbe de vitesse -->
+  <path d="M18 38 C 23 38, 24 24, 29 24 S 35 40, 40 40 S 44 28, 46 28" fill="none" stroke="#ffd54f" stroke-width="3.2" stroke-linecap="round"/>
+</svg>
