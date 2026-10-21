@@ -90,7 +90,7 @@ def _check_write(st: Statement, line: int, in_bank: bool, ref: Reference) -> lis
             out.append(Diagnostic("erreur", "E005", line, f"K{st.index} : paramètre inconnu"))
             return out
         if not kp.documente:
-            out.append(Diagnostic("avertissement", "W013", line, f"K{st.index} : paramètre non documenté ({kp.note or 'RT3 seulement'})"))
+            out.append(Diagnostic("info", "W013", line, f"K{st.index} : paramètre non documenté ({kp.note or 'RT3 seulement'})"))
         if st.value and st.value.kind == "int":
             for pb in kp.check(st.value.int_value or 0):
                 out.append(Diagnostic("erreur", "E005", line, pb))

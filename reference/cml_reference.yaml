@@ -174,7 +174,7 @@ requetes:
     - {cmd: "?",     retour: "P0, A0, S0 courants", format_reponse: null, statut: a_confirmer}
     - {cmd: "?x",    retour: "Tout le registre x (ex : ?P, ?S, ?A, ?M, ?V, ?N, ?R, ?T)", format_reponse: null, statut: a_confirmer, note: "RT3 : ?P,?S,?A,?M,?V,?N,?R"}
     - {cmd: "?0..?16", retour: "Une banque de programme", format_reponse: null, statut: conflit, note: "RT3 et UG disent 0..16 alors que 30 banques existent : à vérifier pour ?17..?30"}
-    - {cmd: "?1000", retour: "Toutes les banques (programme + logiques) et le nombre de pas utilisés (200 max)", format_reponse: null, statut: a_confirmer, note: "Multi-lignes. Format exact à capturer : indispensable pour la vérification après téléchargement."}
+    - {cmd: "?1000", retour: "Toutes les banques (programme + logiques) et le nombre de pas utilisés (200 max)", format_reponse: "en-tête 'B1.1' puis les lignes de la banque réécrites avec un espace après chaque virgule ('A2.1, S2.1, P3.1+'), sans END ; après les banques de programme une ligne '- Total 12 steps -', puis les banques logiques et '- Total 4 steps -'", statut: observe, source: [CAPTURE]}
     - {cmd: "?51",   retour: "État OUT1", format_reponse: null, statut: a_confirmer}
     - {cmd: "?52",   retour: "État OUT2", format_reponse: null, statut: a_confirmer}
     - {cmd: "?70",   retour: "État des entrées", format_reponse: null, statut: a_confirmer, note: "probablement binaire IN1=1 IN2=2 IN3=4 IN4=8 comme la variable \"IN\""}

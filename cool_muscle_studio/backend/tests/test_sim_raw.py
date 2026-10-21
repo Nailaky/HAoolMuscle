@@ -126,9 +126,8 @@ def test_bank_record_dump_and_run():
             for cmd in ("A1.1=100", "S1.1=100", "P1.1=2000", "T1.1=50", "B1.1", "A1.1", "S1.1", "P1.1", "T1", "END.1"):
                 await send(writer, cmd)
             await send(writer, "?1000.1")
-            lines = await read_until(reader, lambda l: l.startswith("Steps"))
-            assert lines[-6:] == ["B1.1", "A1.1", "S1.1", "P1.1", "T1", "END.1", "Steps.1=4/200"][-6:]
-            assert lines[-7] == "B1.1"
+            lines = await read_until(reader, lambda l: l.startswith("- Total"))
+            assert lines[-6:] == ["B1.1", "A1.1", "S1.1", "P1.1", "T1", "- Total 4 steps -"]  # format observé : pas de END
             await send(writer, "[1.1")
             await read_until(reader, lambda l: l == "Ux.1=0")
             await read_until(reader, lambda l: l == "Ux.1=8", timeout=5)
@@ -138,8 +137,8 @@ def test_bank_record_dump_and_run():
             assert (await read_until(reader, lambda l: l.startswith("Saved")))[-1] == "Saved.1"
             await send(writer, "B100.1")
             await send(writer, "?1000.1")
-            lines = await read_until(reader, lambda l: l.startswith("Steps"))
-            assert lines[-1] == "Steps.1=0/200"
+            lines = await read_until(reader, lambda l: l.startswith("- Total"))
+            assert lines[-1] == "- Total 0 steps -"
         finally:
             writer.close()
             await sim.stop()

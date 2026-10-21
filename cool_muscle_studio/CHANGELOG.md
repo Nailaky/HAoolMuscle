@@ -1,5 +1,13 @@
 # Journal des modifications
 
+## 0.3.2 (2026-10-21)
+
+- Export : analyse du vrai format de `?1000` (en-têtes de banque sans `END`,
+  lignes « - Total n steps - ») ; le fichier exporté se réimporte sans erreur.
+  Les valeurs K sont conservées telles quelles (`K26.1=0000`).
+- Validation : « paramètre non documenté » devient une information, plus un
+  avertissement.
+
 ## 0.3.1 (2026-10-21)
 
 - Export : `?90` et les registres sont renvoyés par groupes séparés par des

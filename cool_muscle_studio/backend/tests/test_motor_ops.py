@@ -19,12 +19,17 @@ def test_grouped_k_lines_from_real_motor():
     assert regs == [("P", "0", "1", "250"), ("P", "1", "1", "2000"), ("V", "2", "1", '"Px"')]
 
 
-def test_parse_banks():
-    lines = ["B1.1", "A1.1", "S1.1", "P1.1", "END.1", "L2.1", "I1,CL3,T0", "END.1", "Steps.1=4/200"]
-    banks = parse_banks(lines)
-    assert [b["nom"] for b in banks] == ["B1", "L2"]
-    assert banks[0]["lignes"] == ["A1.1", "S1.1", "P1.1"] and banks[1]["lignes"] == ["I1,CL3,T0"]
-    assert parse_banks(["B3.1", "T0"])[0].get("incomplete") is True
+def test_parse_banks_real_format():
+    # réponse réelle à ?1000 (export du 2026-10-21) : en-têtes sans END, totaux par groupe
+    lines = ["B1.1", "A2.1, S2.1, P3.1+", "B2.1", "A1.1, S1.1, P2.1", "B3.1", "A1.1, S1.1, P1.1", "- Total 12 steps -",
+             "L1.1", "I4.1, [2.1, [3.1", "- Total 4 steps -"]
+    banks, totals = parse_banks(lines)
+    assert [b["nom"] for b in banks] == ["B1", "B2", "B3", "L1"]
+    assert banks[0]["lignes"] == ["A2.1,S2.1,P3.1+"] and banks[3]["lignes"] == ["I4.1,[2.1,[3.1"]
+    assert totals == {"B": 12, "L": 4}
+    # l'ancien format avec END reste accepté
+    banks, _ = parse_banks(["B1.1", "A1.1", "END.1", "L2.1", "I1,CL3,T0", "END.1"])
+    assert [b["nom"] for b in banks] == ["B1", "L2"] and banks[1]["lignes"] == ["I1,CL3,T0"]
 
 
 def test_k37_position_sequence(tmp_path):

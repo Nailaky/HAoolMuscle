@@ -103,7 +103,7 @@ class ConfigExport:
     moteur: int
     horodatage: str
     banniere: str | None
-    k: dict[int, int]
+    k: dict[int, str]
     registres: dict[str, dict[int, str]]
     banques: list[dict[str, Any]]
     brut: dict[str, list[str]] = field(default_factory=dict)
@@ -155,25 +155,57 @@ class ConfigExport:
         }
 
 
-def parse_banks(lines: list[str]) -> list[dict[str, Any]]:
+RE_TOTAL = re.compile(r"^-\s*Total\s+(\d+)\s+steps?\s*-$", re.I)
+
+
+def normalize_bank_line(line: str) -> str:
+    """« A2.1, S2.1, P3.1+ » (format de ?1000) -> « A2.1,S2.1,P3.1+ »."""
+    return ",".join(p.strip() for p in line.split(","))
+
+
+def parse_banks(lines: list[str]) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Analyse la réponse à ?1000 (format observé sur le moteur réel, RT3.14) :
+
+        B1.1
+        A2.1, S2.1, P3.1+
+        B2.1
+        A1.1, S1.1, P2.1
+        - Total 12 steps -
+        L1.1
+        I4.1, [2.1, [3.1
+        - Total 4 steps -
+
+    Un nouvel en-tête B#/L# ferme la banque en cours ; il n'y a pas de END.
+    Un éventuel END est accepté aussi. Retourne (banques, totaux par type).
+    """
     banks: list[dict[str, Any]] = []
+    totals: dict[str, int] = {}
     cur: dict[str, Any] | None = None
     for l in lines:
         s = l.strip()
         m = RE_BANK_START.match(s)
-        if m and cur is None and int(m.group(2)) != 100:
+        if m and int(m.group(2)) != 100:
+            if cur is not None:
+                banks.append(cur)
             cur = {"nom": f"{m.group(1).upper()}{int(m.group(2))}", "lignes": []}
             continue
-        if cur is not None:
-            if RE_END.match(s):
+        mt = RE_TOTAL.match(s)
+        if mt:
+            if cur is not None:
+                banks.append(cur)
+                totals[cur["nom"][0]] = int(mt.group(1))
+                cur = None
+            continue
+        if RE_END.match(s):
+            if cur is not None:
                 banks.append(cur)
                 cur = None
-            else:
-                cur["lignes"].append(s)
-    if cur is not None:  # banque non terminée dans la réponse : on la garde telle quelle
-        cur["incomplete"] = True
+            continue
+        if cur is not None and s:
+            cur["lignes"].append(normalize_bank_line(s))
+    if cur is not None:
         banks.append(cur)
-    return banks
+    return banks, totals
 
 
 async def export_config(bridge: BridgeClient, motor: int, reference: Reference, dossier: Path, banner_timeout: float = 2.0) -> tuple[ConfigExport, Path, Path]:
@@ -186,11 +218,11 @@ async def export_config(bridge: BridgeClient, motor: int, reference: Reference, 
     brut["?85"] = [banner] if banner else []
     k_lines = await collect(bridge, f"?90.{motor}")
     brut["?90"] = k_lines
-    k: dict[int, int] = {}
+    k: dict[int, str] = {}
     for st in statements(k_lines):
         m = RE_K.match(st)
         if m and int(m.group(2)) == motor:
-            k[int(m.group(1))] = int(m.group(3))
+            k[int(m.group(1))] = m.group(3)  # texte conservé tel quel (K26.1=0000, K28.1=0800)
     registres: dict[str, dict[int, str]] = {}
     for letter in "PSAMTVNRH":
         lines = await collect(bridge, f"?{letter}.{motor}", quiet=0.3, timeout=4.0)
@@ -203,7 +235,8 @@ async def export_config(bridge: BridgeClient, motor: int, reference: Reference, 
         registres[letter] = regs
     bank_lines = await collect(bridge, f"?1000.{motor}", quiet=0.5, timeout=10.0)
     brut["?1000"] = bank_lines
-    banques = parse_banks(bank_lines)
+    banques, totaux = parse_banks(bank_lines)
+    brut["totaux"] = [f"{k}:{v}" for k, v in totaux.items()]
     now = datetime.now(timezone.utc).astimezone()
     exp = ConfigExport(pont=bridge.name, moteur=motor, horodatage=now.isoformat(timespec="seconds"), banniere=banner,
                        k=k, registres=registres, banques=banques, brut=brut)

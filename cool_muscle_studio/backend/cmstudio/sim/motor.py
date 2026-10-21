@@ -407,10 +407,16 @@ class MotorSim:
         n = int(a)
         if 0 <= n <= 30:
             self._dump_bank(f"B{n}")
+            self.emit(self.fmt("steps", used=len(self.banks.get(f"B{n}", []))))
         elif n == 1000:
-            for name in sorted(self.banks, key=lambda s: (s[0], int(s[1:]))):
-                self._dump_bank(name)
-            self.emit(self.fmt("steps", used=self.step_count()))
+            # format observé (capture 2026-10-21) : en-têtes sans END, puis « - Total n steps - »
+            # après les banques de programme et après les banques logiques
+            for kind in ("B", "L"):
+                names = sorted((s for s in self.banks if s[0] == kind), key=lambda s: int(s[1:]))
+                for name in names:
+                    self._dump_bank(name)
+                if names or kind == "B":
+                    self.emit(self.fmt("steps", used=sum(len(self.banks[s]) for s in names)))
         elif n == 51:
             self.emit(self.fmt("query_generic", q=51, v=1 if self.outputs & 1 else 0))
         elif n == 52:
@@ -463,8 +469,7 @@ class MotorSim:
             return
         self.emit(self.fmt("bank_header", name=name))
         for ln in lines:
-            self.emit(ln)
-        self.emit(self.fmt("bank_end"))
+            self.emit(", ".join(p.strip() for p in ln.split(",")))  # le moteur réécrit « A2.1, S2.1, P3.1+ »
 
     def step_count(self) -> int:
         return sum(len(v) for v in self.banks.values())
