@@ -39,8 +39,8 @@ def test_banner_echo_and_k_read():
             await send(writer, "?99.1")
             assert (await read_until(reader, lambda l: l.startswith("Ux")))[-1] == "Ux.1=8"
             await send(writer, "?90.1")
-            lines = await read_until(reader, lambda l: l.startswith("K90.1="))
-            assert "K37.1=3" in lines and lines[1] == "K14.1=0"
+            lines = await read_until(reader, lambda l: "K90.1=" in l)
+            assert any("K37.1=3" in l for l in lines) and lines[1].startswith("K14.1=0,K20.1=0,")  # 4 K par ligne (observé)
             await send(writer, "_SKH")
             assert (await read_until(reader, lambda l: l.startswith("_SKH.1=")))[-1] == "_SKH.1=1"
         finally:

@@ -130,7 +130,11 @@
   }
   function updateFromEvent(ev) {
     if (!state.pont) return;
-    if (ev.type === "state") { state.pont.mode = ev.mode; state.pont.busy = ev.busy; state.pont.connected = true; applyState(state.pont); }
+    if (ev.type === "state") {
+      const wasConnected = state.pont.connected;
+      state.pont.mode = ev.mode; state.pont.busy = ev.busy; state.pont.connected = true; applyState(state.pont);
+      if (ev.origin === "hello" || !wasConnected) readK37();  // unités lues dès la connexion
+    }
     if (ev.type === "conn") { state.pont.connected = ev.origin === "connecte"; applyState(state.pont); }
   }
 
@@ -148,6 +152,7 @@
         applyState(data.pont);
         for (const ev of data.historique) state.events.push(ev);
         rerender();
+        if (data.pont.connected) readK37();
         return;
       }
       if (data.type === "pong") return;
@@ -431,7 +436,7 @@
   }
   function bindQuickCommands() {
     $("qc-k37").onclick = readK37;
-    $("qc-motor").onchange = () => { qc.ppr = null; $("qc-units").textContent = "unités inconnues : lire K37"; };
+    $("qc-motor").onchange = () => { qc.ppr = null; readK37(); };
     $("qc-read-pos").onclick = async () => {
       try {
         const r = await getJSON(`api/ponts/${state.slug}/moteurs/${qcMotor()}/position`);

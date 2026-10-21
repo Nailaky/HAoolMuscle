@@ -1,5 +1,15 @@
 # Journal des modifications
 
+## 0.3.1 (2026-10-21)
+
+- Export : `?90` et les registres sont renvoyés par groupes séparés par des
+  virgules sur une même ligne (capture réelle) ; l'analyse en tient compte,
+  le simulateur imite ce format.
+- Commandes rapides : K37 est lu automatiquement à la connexion et au
+  changement de moteur ; en cas d'échec, le message indique les lignes reçues.
+- Référence : K79 à K84 (renvoyés par le moteur, non documentés), K67
+  jusqu'à 10000 (valeur lue sur le moteur).
+
 ## 0.3.0 (2026-10-21)
 
 - Panneau « Commandes rapides » : lecture de K37 pour convertir degrés,

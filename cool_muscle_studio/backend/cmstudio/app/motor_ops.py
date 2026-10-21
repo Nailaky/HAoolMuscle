@@ -19,7 +19,7 @@ from ..reference import Reference
 from .bridge_client import BridgeClient
 
 RE_K = re.compile(r"^K(\d+)\.(\d+)=(-?\d+)$")
-RE_REG = re.compile(r"^([PSAMTVNRH])(\d+)\.(\d+)=(.*)$")
+RE_REG = re.compile(r"^([PSAMTVNRH])(\d+)\.(\d+)=([^,]*)$")
 RE_BANK_START = re.compile(r"^([BL])(\d+)(?:\.(\d+))?$", re.I)
 RE_END = re.compile(r"^END(?:\.(\d+))?$", re.I)
 RE_UX = re.compile(r"^Ux\.")
@@ -63,26 +63,38 @@ async def collect(bridge: BridgeClient, cmd: str, quiet: float = 0.35, timeout: 
     return lines
 
 
-async def read_k37(bridge: BridgeClient, motor: int) -> dict[str, Any]:
-    lines = await collect(bridge, f"K37.{motor}", quiet=0.2, timeout=2.0)
+def statements(lines: list[str]) -> list[str]:
+    """Découpe les lignes reçues en instructions : le moteur renvoie ?90 et les
+    registres par groupes séparés par des virgules (observé : K20.1=0,K21.1=0,…)."""
+    out: list[str] = []
     for l in lines:
-        m = RE_K.match(l)
+        for part in l.split(","):
+            p = part.strip()
+            if p:
+                out.append(p)
+    return out
+
+
+async def read_k37(bridge: BridgeClient, motor: int) -> dict[str, Any]:
+    lines = await collect(bridge, f"K37.{motor}", quiet=0.25, timeout=3.0)
+    for st in statements(lines):
+        m = RE_K.match(st)
         if m and int(m.group(1)) == 37:
             v = int(m.group(3))
             try:
-                return {"k37": v, "resolution": units.resolution(v), "unite_vitesse": units.speed_unit(v)}
+                return {"k37": v, "resolution": units.resolution(v), "unite_vitesse": units.speed_unit(v), "moteur": int(m.group(2))}
             except KeyError:
-                return {"k37": v, "resolution": None, "unite_vitesse": None}
-    raise RuntimeError("pas de réponse du moteur à K37")
+                return {"k37": v, "resolution": None, "unite_vitesse": None, "moteur": int(m.group(2))}
+    raise RuntimeError(f"pas de réponse du moteur {motor} à K37 (lignes reçues : {lines or 'aucune'})")
 
 
 async def read_position(bridge: BridgeClient, motor: int) -> dict[str, Any]:
-    lines = await collect(bridge, f"?96.{motor}", quiet=0.2, timeout=2.0)
-    for l in lines:
-        m = RE_PX.match(l)
+    lines = await collect(bridge, f"?96.{motor}", quiet=0.25, timeout=3.0)
+    for st in statements(lines):
+        m = RE_PX.match(st)
         if m:
-            return {"pulses": int(m.group(2)), "ligne": l}
-    raise RuntimeError("pas de réponse du moteur à ?96")
+            return {"pulses": int(m.group(2)), "ligne": st}
+    raise RuntimeError(f"pas de réponse du moteur {motor} à ?96 (lignes reçues : {lines or 'aucune'})")
 
 
 @dataclass
@@ -175,8 +187,8 @@ async def export_config(bridge: BridgeClient, motor: int, reference: Reference, 
     k_lines = await collect(bridge, f"?90.{motor}")
     brut["?90"] = k_lines
     k: dict[int, int] = {}
-    for l in k_lines:
-        m = RE_K.match(l)
+    for st in statements(k_lines):
+        m = RE_K.match(st)
         if m and int(m.group(2)) == motor:
             k[int(m.group(1))] = int(m.group(3))
     registres: dict[str, dict[int, str]] = {}
@@ -184,8 +196,8 @@ async def export_config(bridge: BridgeClient, motor: int, reference: Reference, 
         lines = await collect(bridge, f"?{letter}.{motor}", quiet=0.3, timeout=4.0)
         brut[f"?{letter}"] = lines
         regs: dict[int, str] = {}
-        for l in lines:
-            m = RE_REG.match(l)
+        for st in statements(lines):
+            m = RE_REG.match(st)
             if m and m.group(1) == letter and int(m.group(3)) == motor:
                 regs[int(m.group(2))] = m.group(4).strip()
         registres[letter] = regs

@@ -451,8 +451,11 @@ class MotorSim:
         return int(min(110, abs(self.vel) / self.vmax * 60 + 10))
 
     def _dump_k(self) -> None:
-        for n in sorted(self.k):
-            self.emit(self.fmt("k", n=n, v=self.k[n]))
+        # Observé sur le vrai moteur (RT3.14) : quatre paramètres par ligne, séparés par des virgules,
+        # ex. « K20.1=0,K21.1=0,K22.1=200,K23.1=1 ».
+        items = [self.fmt("k", n=n, v=self.k[n]) for n in sorted(self.k)]
+        for i in range(0, len(items), 4):
+            self.emit(",".join(items[i:i + 4]))
 
     def _dump_bank(self, name: str) -> None:
         lines = self.banks.get(name)

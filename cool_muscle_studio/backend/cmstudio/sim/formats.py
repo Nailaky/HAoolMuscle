@@ -37,7 +37,7 @@ FORMATS: dict[str, str] = {
 STATUS: dict[str, str] = {
     "echo": "hypothese (écho de la ligne telle quelle)",
     "banner": "observe (brief utilisateur)",
-    "k": "observe (YAML ESPHome)",
+    "k": "observe (capture réelle 2026-10-21 : ?90 renvoie 4 K par ligne séparés par des virgules, ex. K20.1=0,K21.1=0,K22.1=200,K23.1=1)",
     "reg": "documente (UG §10.3 : P15.1=#)",
     "ux": "observe (YAML ESPHome)",
     "px": "observe (YAML ESPHome)",

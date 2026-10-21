@@ -49,6 +49,7 @@ sources:
   CR-UI:    {titre: "Control Room - User Interface", url: "https://docs.myostat.ca/control-room/User-Guide/user-interface"}
   CR-CMP:   {titre: "Control Room - CML vs CMP", url: "https://docs.myostat.ca/control-room/User-Guide/cml-vs-cmp"}
   ESP:      {titre: "cool-muscle.yaml existant (comportement observé en production)", url: null}
+  CAPTURE:  {titre: "Captures du moteur réel CM1-C-17L30 via Cool Muscle Studio (2026-10-21)", url: null}
   BRIEF:    {titre: "Cahier des charges fourni par l'utilisateur, §4", url: null}
 
 # -----------------------------------------------------------------------------
@@ -182,7 +183,7 @@ requetes:
     - {cmd: "?76",   retour: "Valeur du compteur CH2 (hex selon RT3)", format_reponse: null, statut: a_confirmer}
     - {cmd: "?79",   retour: "Temporisation du mode poussée", format_reponse: null, statut: a_confirmer}
     - {cmd: "?85",   retour: "ID moteur et version firmware (+ matériel)", format_reponse: "CM1 ID1 FW:... HW:... (observé)", statut: a_confirmer, source: [BRIEF, ESP]}
-    - {cmd: "?90",   retour: "Tous les paramètres K", format_reponse: "lignes 'K<n>.<id>=<valeur>' (le YAML ESP les analyse ainsi)", statut: a_confirmer, source: [ESP]}
+    - {cmd: "?90",   retour: "Tous les paramètres K", format_reponse: "plusieurs lignes, 4 paramètres par ligne séparés par des virgules : 'K20.1=0,K21.1=0,K22.1=200,K23.1=1' ; chiffres conservés (K26.1=0000, K28.1=0800) ; K79 à K84 présents", statut: observe, source: [CAPTURE]}
     - {cmd: "?91",   retour: "Toutes les positions (P)", format_reponse: null, statut: a_confirmer}
     - {cmd: "?92",   retour: "Toutes les vitesses (S)", format_reponse: null, statut: a_confirmer}
     - {cmd: "?93",   retour: "Toutes les accélérations (A)", format_reponse: null, statut: a_confirmer}
@@ -386,7 +387,7 @@ parametres_k:
     - {k: 66, nom: "Streaming de données", unite: "-", type: enum, defaut: 0,
        valeurs: {0: "Désactivé", 1: "Vitesse cible", 2: "Position réelle", 3: "Vitesse réelle", 4: "Courant réel", 5: "Position réelle en résolution 50k", 6: "Vitesse réelle en résolution 50k"},
        note: "Valeurs 7..30 détaillées dans parametres_k66 (diagnostic). Format des lignes émises non documenté."}
-    - {k: 67, nom: "Période d'échantillonnage du streaming", unite: "ms", type: int, min: 0, max: 3000, defaut: 0}
+    - {k: 67, nom: "Période d'échantillonnage du streaming", unite: "ms", type: int, min: 0, max: 10000, defaut: 0, statut: conflit, note: "Page K : max 3000 ; valeur 10000 lue sur un moteur réel (capture 2026-10-21) : plage élargie."}
     - {k: 68, nom: "Fonction S-curve", unite: "-", type: enum, statut: a_confirmer, valeurs: {0: "S-curve à temps fixe", 1: "S-curve sans contrainte de temps"}, note: "RT3 seulement, absent de la page K."}
     - {k: 69, nom: "Gain S-curve", unite: "-", type: int, min: 0, max: 1024, defaut: 128}
     - {k: 70, nom: "Délimiteur des réponses", unite: "-", type: enum, defaut: 1, valeurs: {0: "CR seul", 1: "CR + LF"}, avertissement: "Le pont ESP32 accepte les deux."}
@@ -398,7 +399,12 @@ parametres_k:
     - {k: 76, nom: "(RT3) Retour de couple externe", statut: a_confirmer, note: "Présent dans le RT3, illisible ; absent de la page K."}
     - {k: 77, nom: "(RT3) Retour de couple externe, valeur moyenne 4,88 mV ?", statut: a_confirmer}
     - {k: 78, nom: "(RT3) Retour de couple externe, gain", statut: a_confirmer}
+    - {k: 79, nom: "(non documenté) renvoyé par ?90", type: int, statut: a_confirmer, note: "Présent dans la réponse ?90 d'un moteur réel (valeur 0), absent de toute documentation.", source: [CAPTURE]}
+    - {k: 80, nom: "(non documenté) renvoyé par ?90", type: int, statut: a_confirmer, note: "Idem K79. La page Output Functions cite un « K80 » pour le couple de poussée (probablement K60).", source: [CAPTURE]}
+    - {k: 81, nom: "(non documenté) renvoyé par ?90", type: int, statut: a_confirmer, source: [CAPTURE]}
+    - {k: 82, nom: "(non documenté) renvoyé par ?90", type: int, statut: a_confirmer, source: [CAPTURE]}
     - {k: 83, nom: "Filtre des entrées numériques", unite: "200 µs", type: int, min: 0, max: 45, defaut: 0}
+    - {k: 84, nom: "(non documenté) renvoyé par ?90", type: int, statut: a_confirmer, source: [CAPTURE]}
     - {k: 85, nom: "Banque logique lancée à la mise sous tension", unite: "-", type: int, min: 0, max: 30, defaut: 0, note: "0 = aucune"}
     - {k: 86, nom: "Synchronisation du mouvement coordonné", unite: "-", type: enum, defaut: 0, valeurs: {0: "Off", 1: "On (moteur 1 seulement)"}}
     - {k: 87, nom: "Période de balayage des banques logiques", unite: "ms", type: int, min: 1, max: 32767, defaut: 0, statut: conflit, note: "Défaut 0 hors plage 1..32767."}
