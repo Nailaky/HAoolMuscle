@@ -1,0 +1,491 @@
+# =============================================================================
+#  Référence structurée du protocole CML du Cool Muscle CM1-C (firmware RT3)
+#  Construite à partir de la documentation officielle Myostat, le 2026-10-21.
+#
+#  Conventions :
+#    source   : identifiant(s) de source (voir `sources` ci-dessous)
+#    statut   : documente     = tiré tel quel de la documentation (défaut)
+#               a_confirmer   = déduit ou observé, non documenté explicitement
+#               conflit       = les sources se contredisent (détail dans `note`)
+#    danger   : mouvement | configuration | arret | lecture | memoire
+#               (sert à décider si l'interface demande une confirmation)
+#  Aucune syntaxe n'est inventée : ce qui n'est pas documenté est listé dans
+#  `points_a_confirmer` et dans docs/questions-ouvertes.md.
+# =============================================================================
+
+meta:
+  produit: "Cool Muscle CM1-C (Myostat / Muscle Corporation)"
+  firmware_reference: "RT3.14.xx (RT3.14.06 = dernière version publiée, 2023-03-31)"
+  date_construction: "2026-10-21"
+  version_schema: 1
+
+sources:
+  UG:       {titre: "CM1-C User Guide v3.00 (PDF, 12/05/2025)", url: "https://docs.myostat.ca/__attachments/a_cfe485d66415d37ce0e1cf6bd2a0c3f022b96a09466892d515bd034ede77cc92/CM1-C%20User%20Guide-v3.00.pdf"}
+  RT3:      {titre: "RT3 Quick Reference Guide (PDF, version 3.14.00)", url: "https://docs.myostat.ca/__attachments/a_2c88599644489f424aef48d6bac6a83169bdf034bb7a913ac4d04d0f96871913/RT3%20Quick%20Reference%20Guide.pdf"}
+  WEB-GS:   {titre: "Getting Started", url: "https://docs.myostat.ca/cm1-c/user-guide/getting-started-1"}
+  WEB-K:    {titre: "K Parameters", url: "https://docs.myostat.ca/cm1-c/user-guide/k-parameters"}
+  WEB-K66:  {titre: "K66 Parameters", url: "https://docs.myostat.ca/cm1-c/user-guide/k66-parameters"}
+  WEB-STAT: {titre: "Status and Error States", url: "https://docs.myostat.ca/cm1-c/user-guide/status-and-error-states"}
+  WEB-MM:   {titre: "Manual Mode", url: "https://docs.myostat.ca/cm1-c/user-guide/manual-mode"}
+  WEB-DC:   {titre: "Direct Control (modes _mop)", url: "https://docs.myostat.ca/cm1-c/user-guide/direct-control"}
+  WEB-PM:   {titre: "Program Mode", url: "https://docs.myostat.ca/cm1-c/user-guide/program-mode"}
+  WEB-IO:   {titre: "Inputs and Outputs", url: "https://docs.myostat.ca/cm1-c/user-guide/inputs-and-outputs"}
+  WEB-IN:   {titre: "Inputs", url: "https://docs.myostat.ca/cm1-c/user-guide/inputs"}
+  WEB-INF:  {titre: "Input Functions", url: "https://docs.myostat.ca/cm1-c/user-guide/input-functions"}
+  WEB-OUT:  {titre: "Outputs", url: "https://docs.myostat.ca/cm1-c/user-guide/outputs"}
+  WEB-OUTF: {titre: "Output Functions", url: "https://docs.myostat.ca/cm1-c/user-guide/output-functions"}
+  WEB-ORG:  {titre: "Origin Search", url: "https://docs.myostat.ca/cm1-c/user-guide/origin-search"}
+  WEB-POS:  {titre: "Position", url: "https://docs.myostat.ca/cm1-c/user-guide/position"}
+  WEB-SPD:  {titre: "Speed", url: "https://docs.myostat.ca/cm1-c/user-guide/speed"}
+  WEB-ACC:  {titre: "Acceleration", url: "https://docs.myostat.ca/cm1-c/user-guide/acceleration"}
+  WEB-TRQ:  {titre: "Torque", url: "https://docs.myostat.ca/cm1-c/user-guide/torque"}
+  WEB-PUSH: {titre: "Push Move", url: "https://docs.myostat.ca/cm1-c/user-guide/push-move"}
+  WEB-MRG:  {titre: "Merge Motion", url: "https://docs.myostat.ca/cm1-c/user-guide/merge-motion"}
+  WEB-TUNE: {titre: "Motor Tuning (H0-H7)", url: "https://docs.myostat.ca/cm1-c/user-guide/motor-tuning"}
+  WEB-FW:   {titre: "CM1 Firmware Update History", url: "https://docs.myostat.ca/cm1-c/user-guide/cm1-firmware-update-history"}
+  WEB-EX:   {titre: "CML Examples", url: "https://docs.myostat.ca/cm1-c/user-guide/cml-examples-2"}
+  WEB-MB:   {titre: "Running the motor in Modbus Mode", url: "https://docs.myostat.ca/cm1-c/user-guide/running-the-motor-in-modbus-mode"}
+  WEB-SPEC: {titre: "Motor Specifications", url: "https://docs.myostat.ca/cm1-c/user-guide/motor-specifications"}
+  CR-UI:    {titre: "Control Room - User Interface", url: "https://docs.myostat.ca/control-room/User-Guide/user-interface"}
+  CR-CMP:   {titre: "Control Room - CML vs CMP", url: "https://docs.myostat.ca/control-room/User-Guide/cml-vs-cmp"}
+  ESP:      {titre: "cool-muscle.yaml existant (comportement observé en production)", url: null}
+  BRIEF:    {titre: "Cahier des charges fourni par l'utilisateur, §4", url: null}
+
+# -----------------------------------------------------------------------------
+protocole:
+  liaison_serie:
+    niveaux: "TTL (IN1 = Rx moteur, OUT1 = Tx moteur)"
+    vitesse_defaut: 38400
+    vitesses_possibles: [9600, 19200, 38400, 57600]
+    format: "8 bits de données, 1 bit de stop, sans parité, sans contrôle de flux"
+    source: [WEB-GS, "UG §4.3.2"]
+  terminaison_commande: "CR (0x0D) obligatoire à la fin de chaque commande"
+  terminaison_reponse:
+    defaut: "CR LF (K70=1)"
+    alternative: "CR seul (K70=0)"
+    source: ["WEB-K K70", "UG §11.1"]
+  longueur_ligne_max: 40      # caractères avant le CR, dans les banques (UG §10.1.1)
+  echo:
+    description: "Le moteur renvoie l'écho de chaque commande, sauf si K23 contient le bit 8 (Disable Echo)."
+    source: ["WEB-K K23", BRIEF]
+    statut: a_confirmer
+    note: "Format exact de l'écho (avec ou sans suffixe .id, avec CR LF) non documenté : à capturer."
+  adressage:
+    syntaxe: "<commande>.<id>  avec id = 1..15 (ex : P1.1=100, ^.2, ?96.3)"
+    sans_id: "Sans suffixe, la commande va au dernier moteur adressé"
+    max_moteurs: 15
+    maitre: "Le moteur 1 (premier de la chaîne) est le maître ; tout passe par lui"
+    source: [WEB-GS, "UG §4.4"]
+  separateur_meme_ligne: ","    # plusieurs commandes sur une ligne, 40 caractères max (UG §10.1.1, §10.5.2)
+  jonction: ":"                  # deux commandes exécutées simultanément dans une branche (UG §10.6)
+  commentaire_fichier:
+    cml: "/ ... (30 caractères max, non envoyé au moteur, syntaxe héritée)"
+    cmp: "// ligne ou /* bloc */ (Control Room uniquement, non envoyé au moteur)"
+    source: [CR-CMP, "UG §10.6", "UG §20.2.1"]
+  banniere_demarrage:
+    format_observe: "CM1 ID1 FW:... HW:..."
+    source: [BRIEF, ESP]
+    statut: a_confirmer
+  messages_spontanes:
+    - {format: "Ux.<id>=<n>", quand: "K23 bit 1 : changement d'état/alarme", source: ["WEB-K K23", ESP]}
+    - {format: "Saved.<id>", quand: "après $", source: ["UG §9.1"]}
+    - {format: "End!", quand: "fin de banque en pas à pas", source: ["UG §9.1"]}
+    - {format: "Can't Back!", quand: "< impossible", source: ["UG §9.1"]}
+    - {format: "error: CW Limit!!", quand: "fin de course atteinte", source: [WEB-INF]}
+    - {format: "{<id>", quand: "mode RS-485 (K62≠0) : demande de parole", source: ["UG §8"]}
+    - {format: "Mx...", quand: "K23 bit 32 : événement merge motion", source: [RT3], statut: a_confirmer}
+    - {format: "lignes K66", quand: "streaming K66/K67 actif", source: [WEB-K66], statut: a_confirmer}
+
+# -----------------------------------------------------------------------------
+etats_ux:
+  description: "Réponse à ?99 et messages Ux automatiques. Les codes s'additionnent (ex : 40 = 8 + 32)."
+  source: [WEB-STAT, "UG §5.6", RT3]
+  codes:
+    - {valeur: 0,   nom: "En mouvement", alarme: false, desactive_moteur: false}
+    - {valeur: 1,   nom: "Dépassement d'erreur de position (K56)", alarme: true, desactive_moteur: true}
+    - {valeur: 2,   nom: "Survitesse ou surtension", alarme: true, desactive_moteur: true}
+    - {valeur: 4,   nom: "Surcharge / surintensité (K57)", alarme: true, desactive_moteur: true}
+    - {valeur: 8,   nom: "En position / prêt", alarme: false, desactive_moteur: false}
+    - {valeur: 16,  nom: "Désactivé (commande ) ou entrée Motor Free)", alarme: false, desactive_moteur: true}
+    - {valeur: 32,  nom: "Limite de couple atteinte en mode poussée (K60)", alarme: false, desactive_moteur: false}
+    - {valeur: 64,  nom: "Erreur de communication (bit B6 du Statusword)", alarme: true, desactive_moteur: false, statut: a_confirmer, source: [WEB-DC]}
+    - {valeur: 128, nom: "Surchauffe (K71)", alarme: true, desactive_moteur: true}
+    - {valeur: 256, nom: "Mode poussée : position atteinte avant la fin du temps (K61)", alarme: false, desactive_moteur: false, note: "banque de programme mise en pause, moteur reste activé"}
+    - {valeur: 512, nom: "Arrêt d'urgence (* ou entrée)", alarme: true, desactive_moteur: false, note: "ignore toute commande de mouvement jusqu'à *1"}
+    - {valeur: 16384, nom: "Nouveau démarrage requis (B14)", statut: a_confirmer, source: [WEB-DC]}
+    - {valeur: 32768, nom: "Origine atteinte (B15)", statut: a_confirmer, source: [WEB-DC]}
+  note: "Les bits B6, B14 et B15 viennent du tableau Statusword de la page Direct Control, qui dit que ?99 renvoie le Statusword. Ils ne figurent pas dans la liste classique 0..512 : à vérifier sur le moteur."
+
+# -----------------------------------------------------------------------------
+commandes_directes:
+  # Mouvement
+  - {cmd: "P0=", nom: "Position cible dynamique", syntaxe: "P0.<id>=<pulses>", danger: configuration, source: ["UG §9.1"], note: "pris en compte au prochain ^"}
+  - {cmd: "S0=", nom: "Vitesse dynamique", syntaxe: "S0.<id>=<unités K37>", danger: configuration, source: ["UG §9.1"], note: "modifiable pendant le mouvement"}
+  - {cmd: "A0=", nom: "Accélération dynamique", syntaxe: "A0.<id>=<Kpps²>", danger: configuration, source: ["UG §9.1"], note: "modifiable pendant le mouvement"}
+  - {cmd: "M0=", nom: "Couple dynamique", syntaxe: "M0.<id>=<% couple crête>", danger: configuration, source: ["UG §9.1"]}
+  - {cmd: "^",   nom: "Exécuter le mouvement (P0,S0,A0,M0)", syntaxe: "^.<id>", danger: mouvement, source: ["UG §9.1"]}
+  - {cmd: "^n",  nom: "Exécuter le mouvement avec les registres n (1..8)", syntaxe: "^<n>.<id>", danger: mouvement, source: ["UG §9.1"]}
+  - {cmd: "~",   nom: "Déplacement relatif de P0 (résolution fixe 50 000 imp/tour)", syntaxe: "~.<id>", danger: mouvement, source: ["UG §9.1", RT3]}
+  # Origine
+  - {cmd: "|",   nom: "Recherche d'origine (K42..K48)", syntaxe: "|.<id>", danger: mouvement, source: ["UG §9.1"], note: "caractère barre verticale ASCII 124 ; délai max 5 min"}
+  - {cmd: "|1",  nom: "Aller à la position 0", syntaxe: "|1.<id>", danger: mouvement, source: ["UG §9.1"], note: "vitesse/accélération = K42, K43"}
+  - {cmd: "|2",  nom: "Position actuelle = origine (0)", syntaxe: "|2.<id>", danger: configuration, source: ["UG §9.1"]}
+  - {cmd: "|4",  nom: "Redémarrage logiciel", syntaxe: "|4.<id>", danger: arret, source: ["UG §9.1"]}
+  - {cmd: "|11", nom: "Effacer le compteur de tours (garde la position dans le tour)", syntaxe: "|11.<id>", danger: configuration, source: ["UG §9.1"]}
+  # Activation
+  - {cmd: "(",   nom: "Activer le moteur", syntaxe: "(.<id>", danger: mouvement, source: ["UG §9.1"], note: "peut provoquer un retour en position"}
+  - {cmd: ")",   nom: "Désactiver le moteur (arbre libre, position suivie)", syntaxe: ").<id>", danger: arret, source: ["UG §9.1"]}
+  # Sorties
+  - {cmd: "O#",  nom: "Activer la sortie # (K34 = 3 ou 4)", syntaxe: "O<1|2>.<id>", danger: configuration, source: ["UG §9.1"]}
+  - {cmd: "F#",  nom: "Désactiver la sortie #", syntaxe: "F<1|2>.<id>", danger: configuration, source: ["UG §9.1"]}
+  # Mémoire
+  - {cmd: "$",   nom: "Sauvegarder registres et banques en EEPROM", syntaxe: "$.<id>", danger: memoire, source: ["UG §9.1"], note: "réponse 'Saved.<id>' ; les K sont sauvés automatiquement (sauf _SKH=0)"}
+  - {cmd: "_SKH", nom: "Sauvegarde automatique des K (et H)", syntaxe: "_SKH=<0|1>  /  _SKH (lecture)", danger: configuration, source: [WEB-K, "WEB-FW RT3.14.03"], note: "remis à 1 au redémarrage ; interdit dans les banques ; RT3.14.03+"}
+  # Banques
+  - {cmd: "[n",  nom: "Exécuter la banque de programme n", syntaxe: "[<n>.<id>", danger: mouvement, source: ["UG §9.1"]}
+  - {cmd: "[Ln", nom: "Exécuter la banque logique n", syntaxe: "[L<n>.<id>", danger: mouvement, source: ["UG §9.1"]}
+  - {cmd: "]",   nom: "Pause (arrêt immédiat) ; deux fois = terminer la banque", syntaxe: "].<id>  ou  ].<id>,].<id>", danger: arret, source: ["UG §9.1"]}
+  - {cmd: "]L",  nom: "Terminer la banque logique", syntaxe: "]L.<id>", danger: arret, source: ["UG §9.1"]}
+  - {cmd: "]1",  nom: "Pause seulement de ce moteur sur la chaîne", syntaxe: "]1", danger: arret, source: [RT3], statut: conflit, note: "RT3 seulement ; le User Guide utilise ].<id>. À confirmer."}
+  - {cmd: "}",   nom: "Pause après la ligne en cours ; deux fois = terminer", syntaxe: "}.<id>", danger: arret, source: ["UG §9.1"]}
+  - {cmd: ">",   nom: "Exécuter la ligne suivante (banque en pause)", syntaxe: ">.<id>", danger: mouvement, source: ["UG §9.1"], note: "'End!' après la dernière ligne"}
+  - {cmd: "<",   nom: "Exécuter la ligne précédente (une seule)", syntaxe: "<.<id>", danger: mouvement, source: ["UG §9.1"], note: "'Can't Back!' si impossible"}
+  - {cmd: "B100", nom: "Effacer toutes les banques de programme", syntaxe: "B100.<id>", danger: memoire, source: ["UG §10.5.2"]}
+  - {cmd: "L100", nom: "Effacer toutes les banques logiques", syntaxe: "L100.<id>", danger: memoire, source: ["UG §10.7.2"]}
+  # Arrêt d'urgence
+  - {cmd: "*",   nom: "Arrêt d'urgence (tous les moteurs de la chaîne)", syntaxe: "*", danger: arret, source: ["UG §9.1"], note: "décélération maximale, programmes stoppés, plus aucune commande de mouvement acceptée"}
+  - {cmd: "*1",  nom: "Annuler l'arrêt d'urgence", syntaxe: "*1", danger: configuration, source: ["UG §9.1"], note: "rien ne redémarre automatiquement"}
+  # Registres (écriture / lecture)
+  - {cmd: "<Reg><n>=", nom: "Écrire un registre", syntaxe: "P5.1=1000, S2.1=430, V2.1=\"Ux\"", danger: configuration, source: ["UG §10.3"]}
+  - {cmd: "<Reg><n>",  nom: "Lire un registre", syntaxe: "P15.1  → réponse P15.1=<valeur>", danger: lecture, source: ["UG §10.3"]}
+  # Direct Control
+  - {cmd: "_mop=", nom: "Mode de fonctionnement Direct Control", syntaxe: "_mop=<0|2|4|10>", danger: configuration, source: [WEB-DC], note: "0 CML standard, 2 profil (P1,S1,A1,A2,R1,N1), 4 position dynamique, 10 couple (N1,S1,R1)"}
+  # RS-485 / multi-nœuds
+  - {cmd: "D#=", nom: "Attribuer l'ID RS-485 au moteur de numéro de série SN", syntaxe: "D<id>=<SN>", danger: configuration, source: ["UG §8.1"]}
+  - {cmd: "{0",  nom: "RS-485 : diffusion / fin de communication", syntaxe: "{0", danger: configuration, source: ["UG §8.1"]}
+  - {cmd: "{n",  nom: "RS-485 : adresser le nœud n (1..255)", syntaxe: "{<n>", danger: configuration, source: ["UG §8.1"]}
+  - {cmd: "FFFFFFFFF", nom: "Sortir temporairement du mode Modbus (9 × F)", syntaxe: "FFFFFFFFF", danger: configuration, source: ["UG §14.3.2"]}
+
+# -----------------------------------------------------------------------------
+requetes:
+  source: ["UG §9.1", RT3, WEB-MM]
+  liste:
+    - {cmd: "?",     retour: "P0, A0, S0 courants", format_reponse: null, statut: a_confirmer}
+    - {cmd: "?x",    retour: "Tout le registre x (ex : ?P, ?S, ?A, ?M, ?V, ?N, ?R, ?T)", format_reponse: null, statut: a_confirmer, note: "RT3 : ?P,?S,?A,?M,?V,?N,?R"}
+    - {cmd: "?0..?16", retour: "Une banque de programme", format_reponse: null, statut: conflit, note: "RT3 et UG disent 0..16 alors que 30 banques existent : à vérifier pour ?17..?30"}
+    - {cmd: "?1000", retour: "Toutes les banques (programme + logiques) et le nombre de pas utilisés (200 max)", format_reponse: null, statut: a_confirmer, note: "Multi-lignes. Format exact à capturer : indispensable pour la vérification après téléchargement."}
+    - {cmd: "?51",   retour: "État OUT1", format_reponse: null, statut: a_confirmer}
+    - {cmd: "?52",   retour: "État OUT2", format_reponse: null, statut: a_confirmer}
+    - {cmd: "?70",   retour: "État des entrées", format_reponse: null, statut: a_confirmer, note: "probablement binaire IN1=1 IN2=2 IN3=4 IN4=8 comme la variable \"IN\""}
+    - {cmd: "?71",   retour: "Température du driver (°C)", format_reponse: null, statut: a_confirmer}
+    - {cmd: "?74",   retour: "Valeur de l'entrée analogique (IN4, 0..1023)", format_reponse: null, statut: a_confirmer}
+    - {cmd: "?76",   retour: "Valeur du compteur CH2 (hex selon RT3)", format_reponse: null, statut: a_confirmer}
+    - {cmd: "?79",   retour: "Temporisation du mode poussée", format_reponse: null, statut: a_confirmer}
+    - {cmd: "?85",   retour: "ID moteur et version firmware (+ matériel)", format_reponse: "CM1 ID1 FW:... HW:... (observé)", statut: a_confirmer, source: [BRIEF, ESP]}
+    - {cmd: "?90",   retour: "Tous les paramètres K", format_reponse: "lignes 'K<n>.<id>=<valeur>' (le YAML ESP les analyse ainsi)", statut: a_confirmer, source: [ESP]}
+    - {cmd: "?91",   retour: "Toutes les positions (P)", format_reponse: null, statut: a_confirmer}
+    - {cmd: "?92",   retour: "Toutes les vitesses (S)", format_reponse: null, statut: a_confirmer}
+    - {cmd: "?93",   retour: "Toutes les accélérations (A)", format_reponse: null, statut: a_confirmer}
+    - {cmd: "?94",   retour: "Toutes les temporisations (T)", format_reponse: null, statut: a_confirmer}
+    - {cmd: "?95",   retour: "Erreur de position", format_reponse: "Ex.<id>=<n> (probable, d'après la table Modbus)", statut: a_confirmer, source: [WEB-MB]}
+    - {cmd: "?96",   retour: "Position courante", format_reponse: "Px.<id>=<n> (observé par le YAML ESP)", statut: a_confirmer, source: [ESP, WEB-MB]}
+    - {cmd: "?97",   retour: "Vitesse courante", format_reponse: "Sx.<id>=<n> (probable)", statut: a_confirmer, source: [WEB-MB]}
+    - {cmd: "?98",   retour: "Courant Iq moyenné / couple", format_reponse: "Tx.<id>=<n> ou Ix.<id>=<n> (à confirmer)", statut: conflit, note: "RT3 : 'Iq Real Averaged' ; table Modbus : 'Tx Actual Torque' ; K66=7 : 'Tx.1=xxx'"}
+    - {cmd: "?99",   retour: "État moteur (codes Ux)", format_reponse: "Ux.<id>=<n> (observé)", statut: documente, source: [WEB-STAT, ESP]}
+  note_pdf: "Dans le PDF UG §9.1 la colonne des descriptions de ?85..?99 est décalée d'une ligne (artefact de mise en page). La correspondance retenue est celle de la page web et du RT3."
+
+# -----------------------------------------------------------------------------
+registres:
+  source: ["UG §10.3.1", RT3]
+  familles:
+    - {lettre: P, nom: "Position", indices: "0..25 (P0 = dynamique)", unite: "impulsions (résolution K37)", min: -1000000000, max: 1000000000, note: "1 000 000 000 = mouvement infini (sens donné par le signe de S)", source: ["UG §10.3.1", WEB-POS]}
+    - {lettre: S, nom: "Vitesse", indices: "0..15", unite: "unité de vitesse K37 (100, 10 ou 1 imp/s)", min: -5000000, max: 5000000, source: ["UG §10.3.1", WEB-SPD]}
+    - {lettre: A, nom: "Accélération", indices: "0..8", unite: "1000 imp/s²", min: -32767, max: 32767, source: ["UG §10.3.1", WEB-ACC]}
+    - {lettre: M, nom: "Couple", indices: "0..8", unite: "% du couple crête", min: 0, max: 100, source: ["UG §10.3.1", WEB-TRQ]}
+    - {lettre: T, nom: "Temporisation", indices: "1..8 (T0 = no-op)", unite: "ms", min: 0, max: 32767, source: ["UG §10.3.1"]}
+    - {lettre: V, nom: "Variable", indices: "0..15", unite: "-", min: -2147483648, max: 2147483647, note: "entier, chaîne 4 caractères max, ou variable d'état entre guillemets", source: ["UG §10.3.1", RT3]}
+    - {lettre: N, nom: "Centre (mouvement coordonné) / usage général", indices: "0..25", unite: "impulsions", min: -2147483648, max: 2147483647, note: "N0 = ordre du polynôme U5", source: ["UG §10.3.1", "UG §10.4.2"]}
+    - {lettre: R, nom: "Rayon (mouvement coordonné) / usage général / Controlword", indices: "0..25", unite: "impulsions", min: -1000000000, max: 1000000000, note: "R0 = mot de commande dans le programme Modbus ; R1 = Controlword en Direct Control", source: ["UG §10.3.1", WEB-DC, WEB-MB]}
+    - {lettre: H, nom: "Gains du régulateur H-infini", indices: "0..7", unite: "-", note: "voir parametres_h", source: [WEB-TUNE]}
+    - {lettre: K, nom: "Paramètres de configuration", indices: "14..90", note: "voir parametres_k", source: [WEB-K]}
+  plages_rt3:
+    note: "Le RT3 donne des plages d'indices parfois différentes : P1-P25, S1-S15, A1-A8, M1-M8, T1-T8, R1-R25, N1-N25, V1-V15, U1-U6 (fonctions)."
+
+variables_internes:
+  description: "Affectées à un registre V entre guillemets, ex : V2.1=\"Px\""
+  source: ["UG §10.3.2", WEB-FW]
+  liste:
+    - {nom: "Ux",   acces: RO,  unite: "-", description: "État moteur (codes Ux)"}
+    - {nom: "Px",   acces: RW,  unite: "impulsions", description: "Position (écriture = fixe la position, moteur à l'arrêt)"}
+    - {nom: "Sx",   acces: RO,  unite: "impulsions/s", description: "Vitesse"}
+    - {nom: "Ix",   acces: RO,  unite: "-", description: "Courant moteur (plage selon modèle : 17L30 ±110)"}
+    - {nom: "Tx",   acces: RO,  unite: "-", description: "Courant cible"}
+    - {nom: "Ex",   acces: RO,  unite: "-", description: "État d'erreur seul (sous-ensemble alarme de Ux)"}
+    - {nom: "Pe",   acces: RO,  unite: "impulsions", description: "Erreur de position"}
+    - {nom: "Pt",   acces: RO,  unite: "impulsions", description: "Cible de position 1 ms du générateur"}
+    - {nom: "St",   acces: RW,  unite: "impulsions/ms", description: "Prochaine cible de vitesse (écriture toutes les 1 ms, déconseillé)"}
+    - {nom: "Dx",   acces: RW,  unite: "impulsions", description: "Prochaine cible de position (écriture toutes les 1 ms, déconseillé)"}
+    - {nom: "AIN4", acces: RO,  unite: "0..1023", description: "Entrée analogique IN4"}
+    - {nom: "Fx",   acces: RO,  unite: "Hz", description: "Fréquence IN2 (K63=3)"}
+    - {nom: "Cx",   acces: RW,  unite: "-", description: "Compteur rapide IN2 (jusqu'à 2 MHz)"}
+    - {nom: "Cx2",  acces: RW,  unite: "-", description: "Compteur IN2 (1 ms, anti-rebond)"}
+    - {nom: "Cx3",  acces: RW,  unite: "-", description: "Compteur IN3"}
+    - {nom: "Cx4",  acces: RW,  unite: "-", description: "Compteur IN4"}
+    - {nom: "AO2",  acces: RW,  unite: "0..255", description: "Sortie analogique OUT2 (K34 = 0)"}
+    - {nom: "IN",   acces: RO,  unite: "bits", description: "IN1=1 IN2=2 IN3=4 IN4=8 (RT3.14.04+)"}
+    - {nom: "INMK", acces: RW,  unite: "bits", description: "Masque des entrées pour IN (défaut 15)"}
+    - {nom: "IN1R..IN4R", acces: RO, unite: "-", description: "Nombre de fronts montants depuis la dernière lecture (RT3.14.04+)"}
+    - {nom: "IN1F..IN4F", acces: RO, unite: "-", description: "Nombre de fronts descendants depuis la dernière lecture (RT3.14.04+)"}
+    - {nom: "Tmr",  acces: RW,  unite: "ms", description: "Compte à rebours 1 ms (0..32767)"}
+    - {nom: "Cnt",  acces: RW,  unite: "ms", description: "Compteur libre 1 ms"}
+    - {nom: "PTmr", acces: RW,  unite: "ms", description: "Temps de poussée (comme K61)"}
+    - {nom: "PV%",  acces: RW,  unite: "0.1 % couple crête", description: "Valeur de poussée (0..800)"}
+    - {nom: "PVal", acces: RW,  unite: "-", description: "Déprécié, utiliser PV%"}
+    - {nom: "DPos", acces: RW,  unite: "0|1|2", description: "Déprécié : comportement de P0 pendant le mouvement"}
+    - {nom: "MOP",  acces: RW,  unite: "0|2|4|10", description: "Mode Direct Control"}
+    - {nom: "EEP1", acces: RW,  unite: "32 bits", description: "Mémoire non volatile 1 (écritures limitées)"}
+    - {nom: "EEP2", acces: RW,  unite: "32 bits", description: "Mémoire non volatile 2"}
+    - {nom: "What", acces: RW,  unite: "chaîne", description: "Chaîne de 4 caractères max (RT3)", source: [RT3]}
+
+# -----------------------------------------------------------------------------
+banques:
+  source: ["UG §10", WEB-PM]
+  limites: {banques_programme: 30, banques_logiques: 30, pas_total_max: 200, caracteres_par_ligne_max: 40}
+  syntaxe:
+    debut_programme: "B<n>"
+    debut_logique: "L<n>"
+    fin: "END"
+    regles:
+      - "Une erreur de syntaxe arrête le chargement de la banque à partir de ce point ; relire avec ?1000 pour vérifier."
+      - "Dans une banque, un registre ne peut pas recevoir une constante numérique (A1.1=100 interdit) ; il doit être copié d'un autre registre (A1.1=V1.1). CMP de Control Room contourne cela en allouant un registre libre."
+      - "Les commandes d'une même ligne sont groupées (équation ou branche) ; les commandes consécutives sont sur des lignes séparées (CR) ou séparées par des virgules."
+      - "Les registres doivent être initialisés avant l'appel de la banque."
+      - "Il est recommandé de commencer un fichier par B100 et L100."
+      - "Terminer par $ pour sauvegarder en EEPROM."
+    source: ["UG §10.1.1", "UG §10.3", "UG §10.5.2"]
+  commandes_programme_source: ["UG §10.5.2", "UG §17", RT3]
+  commandes_programme:
+    - {cmd: "B#",  description: "Début de la banque de programme #"}
+    - {cmd: "P#",  description: "Aller à la position P# (attend l'arrivée) ; P#+ = incrémental"}
+    - {cmd: "S#",  description: "Vitesse du prochain mouvement"}
+    - {cmd: "A#",  description: "Accélération du prochain mouvement"}
+    - {cmd: "M#",  description: "Couple du prochain mouvement"}
+    - {cmd: "X# / X-", description: "Boucle # fois (X0 = infinie, 255 max selon RT3), X- ferme la boucle ; boucles imbriquées autorisées"}
+    - {cmd: "Y#",  description: "Comme P# sans attendre la fin du mouvement"}
+    - {cmd: "Q#",  description: "Mouvement en poussée vers P# (attend la fin du temps K61)"}
+    - {cmd: "Z#",  description: "Q# sans attendre"}
+    - {cmd: ",",   description: "Concaténation / mouvements simultanés (moteurs en ordre décroissant : P1.2,P3.1)"}
+    - {cmd: ";",   description: "Fin de ligne : fusionner avec le mouvement suivant (merge motion)"}
+    - {cmd: "C#",  description: "Appeler la banque de programme # puis revenir"}
+    - {cmd: "J#",  description: "Sauter à la banque de programme # sans retour"}
+    - {cmd: "@#",  description: "Mouvement coordonné vers P# (2 moteurs consécutifs, dans une banque de programme uniquement) ; @#+ / @#- sens de l'arc"}
+    - {cmd: "B100", description: "Effacer toutes les banques de programme"}
+  commandes_communes_source: ["UG §10.6"]
+  commandes_communes:
+    - {cmd: "I#",  description: "Branche sur l'entrée # (I1..I4), ex : I1.1,C2.1,C3.1"}
+    - {cmd: "W0 / W#", description: "Attendre que la condition soit vraie / au plus T# ms"}
+    - {cmd: "T0 / T#", description: "Ne rien faire / attendre T# ms"}
+    - {cmd: "END", description: "Fin de banque"}
+    - {cmd: ":",   description: "Jonction : deux commandes simultanées (I1.1,?96:?97,W0)"}
+    - {cmd: "/",   description: "Commentaire (non envoyé au moteur, 30 caractères, hérité)"}
+  commandes_logiques_source: ["UG §10.7.2"]
+  commandes_logiques:
+    - {cmd: "L#",  description: "Début de la banque logique # (boucle en continu, période K87)"}
+    - {cmd: ";",   description: "Fin d'une opération mathématique : ne pas renvoyer le résultat sur le port série (sens différent du ; de programme)"}
+    - {cmd: "CL#", description: "Appeler la banque logique #"}
+    - {cmd: "JL#", description: "Sauter à la banque logique #"}
+    - {cmd: "L100", description: "Effacer toutes les banques logiques"}
+  branchements:
+    format: "REQUÊTE, SI_VRAI, SI_FAUX"
+    operateurs: ["I# (entrée seule)", "&&", "||", "!!", ">", ">=", "==", "<", "<=", "!= (vu dans l'exemple Modbus)"]
+    exemple: "V1>=V2, ?99, ?96"
+    source: ["UG §10.2", WEB-MB]
+  math:
+    basiques: ["=", "+", "-", "*", "/"]
+    avancees:
+      - {fn: "U1(x)", description: "Sinus (mis à l'échelle)"}
+      - {fn: "U2(x)", description: "Cosinus"}
+      - {fn: "U3(x)", description: "Racine carrée (entière)"}
+      - {fn: "U4",    description: "Table de correspondance (RT3 seulement, non détaillé)", statut: a_confirmer}
+      - {fn: "U5(x)", description: "Polynôme avec coefficients N1..N25, ordre N0"}
+      - {fn: "U6(x)", description: "Polynôme avec coefficients R1..R25, ordre R0"}
+    source: ["UG §10.4", RT3]
+
+# -----------------------------------------------------------------------------
+parametres_k:
+  source_principale: [WEB-K, "UG §11"]
+  note_sauvegarde: "Les K sont sauvés automatiquement en EEPROM à chaque écriture (usure) ; _SKH=0 désactive cette sauvegarde jusqu'au prochain redémarrage."
+  liste:
+    - {k: 14, nom: "Délai de mise sous tension", unite: "ms", type: int, min: 0, max: 32000, defaut: 0}
+    - {k: 20, nom: "Vitesse série principale (UART0) / mode Modbus", unite: "bit/s", type: enum, defaut: 0,
+       valeurs: {0: "38400", 1: "9600", 2: "19200", 3: "57600", 10: "38400 Modbus", 11: "9600 Modbus", 12: "19200 Modbus", 13: "57600 Modbus"},
+       avertissement: "Changer K20 coupe la liaison avec le pont ESP32 (38400 fixe)."}
+    - {k: 21, nom: "Boucle semi-fermée : zone en boucle ouverte autour de la cible", unite: "0,1°", type: int, min: 0, max: 36, defaut: 0, note: "0 = boucle fermée complète"}
+    - {k: 22, nom: "Délai avant passage en boucle ouverte (K21)", unite: "ms", type: int, min: 10, max: 1000, defaut: 0, statut: conflit, note: "Défaut documenté 0 alors que min = 10."}
+    - {k: 23, nom: "Événements envoyés spontanément sur le port série (bits cumulables)", unite: "-", type: bits, defaut: 1,
+       bits: {1: "Tous les codes d'état et d'alarme (Ux)", 2: "État des entrées", 4: "État des sorties", 8: "Désactiver l'écho", 16: "Avertissements et messages", 32: "Événement merge motion (Mx)"},
+       avertissement: "Le pont ESP32 a besoin du bit 1 (Ux) et de l'écho (bit 8 absent)."}
+    - {k: 24, nom: "Intervalle de la sortie quadrature", unite: "impulsions", type: int, min: 4, max: 32767, defaut: 1000}
+    - {k: 25, nom: "Délai de réponse lente des entrées (un chiffre par entrée N4N3N2N1)", unite: "0,1 s par chiffre", type: digits4, min_chiffre: 1, max_chiffre: 9, defaut: 3333}
+    - {k: 26, nom: "Inversion des entrées (N4N3N2N1)", unite: "-", type: digits4, min_chiffre: 0, max_chiffre: 1, defaut: 0}
+    - {k: 27, nom: "Fonction d'entrée, niveau haut réponse rapide (N4N3N2N1)", unite: "-", type: digits4, defaut: 0,
+       valeurs_chiffre: {0: "Aucune", 1: "Usage général", 2: "Capteur d'origine", 3: "Avance manuelle CW", 4: "Avance manuelle CCW", 5: "N/A", 6: "Fin de course CW / origine", 7: "Arrêt d'urgence", 8: "Arrêt complet", 9: "Fin de course CCW / origine"}}
+    - {k: 28, nom: "Fonction d'entrée, front montant réponse rapide (N4N3N2N1)", unite: "-", type: digits4, defaut: 0,
+       valeurs_chiffre: {0: "Aucune", 1: "Acquittement alarme / pause", 2: "Désactiver le moteur", 3: "Remise à zéro de la position", 4: "Pas suivant", 5: "Pas précédent", 6: "Lancer la banque 1", 7: "Recherche d'origine", 8: "Jog CW ou banque 2 (K36=2)", 9: "Jog CCW ou banque 3 (K36=2)"}}
+    - {k: 29, nom: "Fonction d'entrée, front descendant réponse rapide (N4N3N2N1)", unite: "-", type: digits4, defaut: 0,
+       valeurs_chiffre: {0: "Aucune", 1: "Acquittement alarme / pause", 2: "Activer le moteur", 3: "Remise à zéro du compteur", 4: "Pas suivant", 5: "Pas précédent", 6: "Lancer la banque 1", 7: "Recherche d'origine", 8: "Jog CW ou banque 2 (K36=2)", 9: "Jog CCW ou banque 3 (K36=2)"}}
+    - {k: 30, nom: "Fonction d'entrée, niveau haut réponse lente (N4N3N2N1)", unite: "-", type: digits4, defaut: 0, valeurs_chiffre: "comme K27"}
+    - {k: 31, nom: "Fonction d'entrée, front montant réponse lente (N4N3N2N1)", unite: "-", type: digits4, defaut: 0, valeurs_chiffre: "comme K28"}
+    - {k: 32, nom: "Fonction d'entrée, front descendant réponse lente (N4N3N2N1)", unite: "-", type: digits4, defaut: 0, valeurs_chiffre: "comme K29"}
+    - {k: 33, nom: "Logique des sorties (N2N1)", unite: "-", type: digits2, defaut: 11, valeurs_chiffre: {0: "Actif haut", 1: "Actif bas"}}
+    - {k: 34, nom: "Fonction des sorties (N2N1)", unite: "-", type: digits2, defaut: 21,
+       valeurs_chiffre: {0: "AO2 (analogique par variable, OUT2 seulement)", 1: "En position", 2: "Alarme", 3: "CML O1/F1", 4: "CML O2/F2", 5: "Sortie analogique (K35)", 6: "Merge motion", 7: "Quadrature / index", 8: "Moteur libre", 9: "Limite de couple en poussée"}}
+    - {k: 35, nom: "Fonction de la sortie analogique (N2N1)", unite: "-", type: digits2, defaut: 21,
+       valeurs_chiffre: {0: "Position cible", 1: "Position cible ×8", 2: "Position courante", 3: "Position courante ×8", 4: "Erreur de position", 5: "Erreur de position ×8", 6: "Vitesse /16", 7: "Vitesse /2", 8: "Courant", 9: "Courant ×8"}}
+    - {k: 36, nom: "Interface impulsions (type P) / activation banques 2 et 3 (type C)", unite: "-", type: enum, defaut: 0, valeurs: {0: "CW/CCW", 1: "Pas/direction", 2: "Active l'exécution des banques 2 et 3 par entrée"}}
+    - {k: 37, nom: "Résolution et unité de vitesse", unite: "-", type: enum, defaut: 3,
+       avertissement: "Change l'unité de TOUS les registres P, S et des banques. Après modification, l'ESP32 fait un redémarrage logiciel (|4) ; comportement observé, non documenté.",
+       valeurs: {
+         0: "200 imp/tour, unité de vitesse 100 imp/s", 1: "400 imp/tour, 100 imp/s", 2: "500 imp/tour, 100 imp/s", 3: "1000 imp/tour, 100 imp/s (défaut)", 4: "2000 imp/tour, 100 imp/s", 5: "2500 imp/tour, 100 imp/s", 6: "5000 imp/tour, 100 imp/s", 7: "10000 imp/tour, 100 imp/s", 8: "25000 imp/tour, 100 imp/s", 10: "50000 imp/tour, 100 imp/s",
+         20: "200 imp/tour, 10 imp/s", 21: "400 imp/tour, 10 imp/s", 22: "500 imp/tour, 10 imp/s", 23: "1000 imp/tour, 10 imp/s", 24: "2000 imp/tour, 10 imp/s", 25: "2500 imp/tour, 10 imp/s", 26: "5000 imp/tour, 10 imp/s", 27: "10000 imp/tour, 10 imp/s", 28: "25000 imp/tour, 10 imp/s", 30: "50000 imp/tour, 10 imp/s",
+         40: "300 imp/tour, 100 imp/s", 42: "600 imp/tour, 100 imp/s", 43: "800 imp/tour, 100 imp/s", 44: "1200 imp/tour, 100 imp/s", 45: "1500 imp/tour, 100 imp/s", 46: "3000 imp/tour, 100 imp/s", 47: "4000 imp/tour, 100 imp/s", 48: "6000 imp/tour, 100 imp/s", 49: "8000 imp/tour, 100 imp/s", 50: "12000 imp/tour, 100 imp/s",
+         60: "300 imp/tour, 10 imp/s", 62: "600 imp/tour, 10 imp/s", 63: "800 imp/tour, 10 imp/s", 64: "1200 imp/tour, 10 imp/s", 65: "1500 imp/tour, 10 imp/s", 66: "3000 imp/tour, 10 imp/s", 67: "4000 imp/tour, 10 imp/s", 68: "6000 imp/tour, 10 imp/s", 69: "8000 imp/tour, 10 imp/s", 70: "12000 imp/tour, 10 imp/s",
+         100: "50000 imp/tour, 1 imp/s"}}
+    - {k: 38, nom: "Interface analogique (si K64=9)", unite: "-", type: enum, defaut: 1, valeurs: {0: "Commande de vitesse", 1: "Commande de position"}}
+    - {k: 39, nom: "Gain du filtre de tension analogique", unite: "5 rad/s", type: int, min: 0, max: 1024, defaut: 128}
+    - {k: 40, nom: "Vitesse max en commande analogique", unite: "tr/min", type: int, min: 0, max: 3000, defaut: 200}
+    - {k: 41, nom: "Course max en commande analogique", unite: "impulsions", type: int, min: -32767, max: 32767, defaut: 2000}
+    - {k: 42, nom: "Vitesse de recherche d'origine", unite: "100 imp/s", type: int, min: 1, max: 5000, defaut: 10}
+    - {k: 43, nom: "Accélération de recherche d'origine (et avance manuelle)", unite: "1000 imp/s²", type: int, min: 1, max: 5000, defaut: 100}
+    - {k: 44, nom: "Rapport de décélération", unite: "% de l'accélération", type: int, min: 10, max: 500, defaut: 100}
+    - {k: 45, nom: "Sens de recherche d'origine / sens positif", unite: "-", type: enum, defaut: 1, valeurs: {0: "Horaire", 1: "Antihoraire", 2: "Horaire, coordonnées inversées", 3: "Antihoraire, coordonnées inversées"}}
+    - {k: 46, nom: "Méthode de recherche d'origine", unite: "-", type: enum, defaut: 0,
+       valeurs: {0: "Butée mécanique", 1: "Butée, recherche à la mise sous tension", 2: "Capteur d'origine", 3: "Capteur, recherche à la mise sous tension", 16: "Butée, démarrage moteur désactivé", 18: "Capteur, démarrage moteur désactivé"},
+       note: "RT3 ajoute 17 et 19 (comme 1 et 3 avec démarrage désactivé)."}
+    - {k: 47, nom: "Couple de détection de butée", unite: "%", type: int, min: 10, max: 100, defaut: 30}
+    - {k: 48, nom: "Décalage de l'origine", unite: "100 impulsions", type: int, min: -32767, max: 32767, defaut: 0}
+    - {k: 49, nom: "Vitesse d'avance manuelle", unite: "100 imp/s", type: int, min: 10, max: 100, defaut: 30, statut: conflit, note: "La page K dit 'Unit: 100 Pulses' ; la note d'application dit 'K49=2 → 200 pulses per second' ; retenu : 100 imp/s."}
+    - {k: 50, nom: "Distance du jog manuel", unite: "impulsions", type: int, min: 10, max: 100, defaut: 10}
+    - {k: 51, nom: "Vitesse lente (creeping speed)", unite: "-", type: int, statut: a_confirmer, note: "Présent dans le RT3 seulement ; plage illisible ; absent de la page K."}
+    - {k: 52, nom: "E/S 1 et 2 : numérique ou série (N2N1)", unite: "-", type: digits2, defaut: 0, valeurs_chiffre: {0: "Auto-détection", 1: "Forcer série", 2: "Forcer numérique (IN/OUT1 impossible)"}, avertissement: "Le pont ESP32 impose K52 = 1 (chiffre N1)."}
+    - {k: 53, nom: "Sortie frein (numéro de sortie, négatif = inversé ; K34 de cette sortie doit être 0)", unite: "-", type: int, min: -6, max: 6, defaut: 0}
+    - {k: 54, nom: "Décalage de la sortie quadrature", unite: "impulsions", type: int, min: 0, max: 32767, defaut: 0}
+    - {k: 55, nom: "Tolérance en position", unite: "impulsions", type: int, min: 1, max: 100, defaut: 5, note: "RT3 : max 1000"}
+    - {k: 56, nom: "Seuil d'alarme d'erreur de position", unite: "1000 impulsions", type: int, min: 1, max: 32767, defaut: 50}
+    - {k: 57, nom: "Délai d'alarme de surcharge", unite: "ms", type: int, min: 100, max: 10000, defaut: 3000}
+    - {k: 58, nom: "Limite logicielle de position +", unite: "100 impulsions", type: int, min: 0, max: 32767, defaut: 0, note: "0 = désactivée"}
+    - {k: 59, nom: "Limite logicielle de position −", unite: "100 impulsions", type: int, min: -32767, max: 0, defaut: 0, note: "0 = désactivée ; documenté 'Min 0 Max -32767'"}
+    - {k: 60, nom: "Couple en mode poussée", unite: "% de 80 % du couple max", type: int, min: 10, max: 80, defaut: 0, statut: conflit, note: "Défaut 0 hors plage 10..80."}
+    - {k: 61, nom: "Temps de poussée", unite: "ms", type: int, min: 10, max: 3001, defaut: 200, statut: conflit, note: "Page K : max 3001 (3001 = infini) ; page Push Move : max 30000, 30001 = infini ; RT3 : 30001."}
+    - {k: 62, nom: "ID de nœud RS-485 / station Modbus", unite: "-", type: int, min: -256, max: 256, defaut: 0, note: "0 = mode RS-232 ; 1..256 = nœud RS-485 ; négatif = sans rapport automatique. K62≠0 fait émettre '{n' et bloque le dialogue normal.", avertissement: "Ne jamais écrire sans comprendre le mode RS-485."}
+    - {k: 63, nom: "Entrée codeur externe", unite: "-", type: enum, defaut: 0, valeurs: {0: "Aucune", 1: "Phase A", 2: "Phases A et B", 3: "Active les variables Fx et Cx"}}
+    - {k: 64, nom: "Fonction de l'entrée analogique", unite: "-", type: enum, defaut: 0,
+       valeurs: {0: "Aucune", 1: "N/A (RT3 : S0)", 2: "P0", 3: "S13", 4: "P24", 5: "S14", 6: "P25", 7: "Vitesse proportionnelle 0..cible", 8: "Multiplicateur de position (%)", 9: "Commande analogique seule (K38)"}}
+    - {k: 65, nom: "Vitesse série vers les moteurs aval (esclaves)", unite: "bit/s", type: enum, defaut: 0,
+       valeurs: {0: "38400", 1: "9600", 2: "19200", 3: "57600", 4: "76800", 5: "129000", 6: "173000", 7: "515000", 10: "38400 Modbus", 11: "9600 Modbus", 12: "19200 Modbus", 13: "57600 Modbus", 14: "76800 Modbus", 15: "129000 Modbus", 16: "173000 Modbus", 17: "515000 Modbus"}}
+    - {k: 66, nom: "Streaming de données", unite: "-", type: enum, defaut: 0,
+       valeurs: {0: "Désactivé", 1: "Vitesse cible", 2: "Position réelle", 3: "Vitesse réelle", 4: "Courant réel", 5: "Position réelle en résolution 50k", 6: "Vitesse réelle en résolution 50k"},
+       note: "Valeurs 7..30 détaillées dans parametres_k66 (diagnostic). Format des lignes émises non documenté."}
+    - {k: 67, nom: "Période d'échantillonnage du streaming", unite: "ms", type: int, min: 0, max: 3000, defaut: 0}
+    - {k: 68, nom: "Fonction S-curve", unite: "-", type: enum, statut: a_confirmer, valeurs: {0: "S-curve à temps fixe", 1: "S-curve sans contrainte de temps"}, note: "RT3 seulement, absent de la page K."}
+    - {k: 69, nom: "Gain S-curve", unite: "-", type: int, min: 0, max: 1024, defaut: 128}
+    - {k: 70, nom: "Délimiteur des réponses", unite: "-", type: enum, defaut: 1, valeurs: {0: "CR seul", 1: "CR + LF"}, avertissement: "Le pont ESP32 accepte les deux."}
+    - {k: 71, nom: "Seuil d'alarme de température", unite: "°C", type: int, min: 0, max: 150, defaut: 150, note: "acquittable 10 °C sous le seuil"}
+    - {k: 72, nom: "Seuil de tension de régénération", unite: "0,1 V", type: int, min: 0, max: 391, statut: conflit, note: "Page K : 'non implémenté, sans effet' ; RT3 : 'Regeneration voltage return level 0.1V 0..391' ; page Status : 'limit programmed in K72'."}
+    - {k: 73, nom: "Durée du signal de sortie merge motion", unite: "ms", type: int, min: 0, max: 1000, defaut: 10}
+    - {k: 74, nom: "Gain P du retour de couple externe", unite: "-", type: int, min: 0, max: 1000, defaut: 0}
+    - {k: 75, nom: "Gain I du retour de couple externe", unite: "-", type: int, min: 0, max: 500, defaut: 0}
+    - {k: 76, nom: "(RT3) Retour de couple externe", statut: a_confirmer, note: "Présent dans le RT3, illisible ; absent de la page K."}
+    - {k: 77, nom: "(RT3) Retour de couple externe, valeur moyenne 4,88 mV ?", statut: a_confirmer}
+    - {k: 78, nom: "(RT3) Retour de couple externe, gain", statut: a_confirmer}
+    - {k: 83, nom: "Filtre des entrées numériques", unite: "200 µs", type: int, min: 0, max: 45, defaut: 0}
+    - {k: 85, nom: "Banque logique lancée à la mise sous tension", unite: "-", type: int, min: 0, max: 30, defaut: 0, note: "0 = aucune"}
+    - {k: 86, nom: "Synchronisation du mouvement coordonné", unite: "-", type: enum, defaut: 0, valeurs: {0: "Off", 1: "On (moteur 1 seulement)"}}
+    - {k: 87, nom: "Période de balayage des banques logiques", unite: "ms", type: int, min: 1, max: 32767, defaut: 0, statut: conflit, note: "Défaut 0 hors plage 1..32767."}
+    - {k: 88, nom: "Résolution du codeur externe", unite: "impulsions", type: int, min: 1, max: 50000, defaut: 0}
+    - {k: 89, nom: "Adresse Modbus du registre d'entrée", unite: "-", type: int, min: 0, max: 65535, defaut: 640}
+    - {k: 90, nom: "Adresse Modbus du registre de sortie", unite: "-", type: int, min: 0, max: 65535, defaut: 2048}
+
+parametres_k66:
+  source: [WEB-K66, "UG §11.3"]
+  note: "Valeurs 1..30. 'quand' = running (pendant le mouvement) ou always. Le format exact des lignes n'est pas documenté (sauf K66=7 : 'Tx.1=xxx')."
+  liste:
+    - {valeur: 1,  sortie: "Vitesse cible", quand: running}
+    - {valeur: 2,  sortie: "Position courante", quand: running}
+    - {valeur: 3,  sortie: "Vitesse courante", quand: running}
+    - {valeur: 4,  sortie: "Couple courant", quand: running}
+    - {valeur: 5,  sortie: "Position courante (résolution 50k)", quand: running}
+    - {valeur: 6,  sortie: "Vitesse courante (idem 3 ?)", quand: running}
+    - {valeur: 7,  sortie: "Couple courant, format Tx.1=xxx", quand: running}
+    - {valeur: 8,  sortie: "État moteur, délai d'alarme de surcharge (K57/32*5)", quand: running}
+    - {valeur: 9,  sortie: "Iq, Iq cible, Id, Id cible", quand: running}
+    - {valeur: 10, sortie: "ADIU0, ADIV0, ADSIN, ADCOS (codeur)", quand: running}
+    - {valeur: 11, sortie: "AngleRealComp, AngleReal, position 50k", quand: always}
+    - {valeur: 12, sortie: "SinOffset, CosOffset, PositionOffset", quand: always}
+    - {valeur: 13, sortie: "Tours, cible, réel, schedule ready, vgenerated…", quand: always}
+    - {valeur: 14, sortie: "vGenerated, VelocityReal", quand: always}
+    - {valeur: 15, sortie: "VoltageFilter4, OS_input420, ADAIN0 (IN4)", quand: always}
+    - {valeur: 16, sortie: "Courant H∞, limite de courant max", quand: always}
+    - {valeur: 17, sortie: "Courant H∞", quand: always}
+    - {valeur: 18, sortie: "État de l'intégrateur", quand: always}
+    - {valeur: 19, sortie: "Torque.torMeasure.1, Torque.torU.1", quand: always}
+    - {valeur: 20, sortie: "Erreur de position", quand: always}
+    - {valeur: 21, sortie: "Moyenne glissante du couple² (surcharge)", quand: always}
+    - {valeur: 22, sortie: "Couple² courant", quand: always}
+    - {valeur: 23, sortie: "Vitesse d'avance manuelle", quand: always}
+    - {valeur: 24, sortie: "Compteur codeur externe", quand: always}
+    - {valeur: 25, sortie: "Vitesse lente (moyenne 10 s, 50k)", quand: always}
+    - {valeur: 26, sortie: "Position 50k, AngleReal", quand: always}
+    - {valeur: 27, sortie: "N/A", quand: always}
+    - {valeur: 28, sortie: "ADCOS, ADSIN, AngleReal, position 50k", quand: always}
+    - {valeur: 29, sortie: "TaskCounter, tm4, positionFilterRes", quand: always}
+    - {valeur: 30, sortie: "État OUT1, OUT2", quand: always}
+
+parametres_h:
+  source: [WEB-TUNE, "UG §12"]
+  description: "Gains du régulateur H-infini. H1 et H2 ne doivent pas être modifiés. Sauvegarde automatique comme les K (_SKH)."
+  liste:
+    - {h: 0, nom: "Gain global (%)", min: 20, max: 100, defaut: {11S: 100, 11L: 100, 17S: 100, 17L: 100, 23S: 100, 23L: 100}}
+    - {h: 1, nom: "Sans fonction (ne pas modifier)", min: 0, max: 512, defaut: {11S: 46, 11L: 46, 17S: 46, 17L: 46, 23S: 46, 23L: 46}}
+    - {h: 2, nom: "Sans fonction (ne pas modifier)", min: -5000, max: 5000, defaut: {11S: -2427, 11L: -2427, 17S: -2427, 17L: -2427, 23S: -2427, 23L: -2427}}
+    - {h: 3, nom: "Filtre (raidit le régulateur)", min: 0, max: 5000, defaut: {11S: 1747, 11L: 1454, 17S: 2100, 17L: 455, 23S: 376, 23L: 204}}
+    - {h: 4, nom: "≈ gain proportionnel", min: 0, max: 3000, defaut: {11S: 127, 11L: 74, 17S: 61, 17L: 54, 23S: 70, 23L: 90}}
+    - {h: 5, nom: "≈ gain dérivé", min: 0, max: 1000, defaut: {11S: 46, 11L: 31, 17S: 20, 17L: 34, 23S: 43, 23L: 65}}
+    - {h: 6, nom: "≈ gain intégral", min: 0, max: 1000, defaut: {11S: 38, 11L: 20, 17S: 21, 17L: 10, 23S: 13, 23L: 15}}
+    - {h: 7, nom: "Filtre (rend le système plus mou)", min: 0, max: 32767, defaut: {11S: 98, 11L: 64, 17S: 19, 17L: 8, 23S: 21, 23L: 10}}
+
+moteurs:
+  source: [WEB-SPEC, "UG §3.1", "UG §10.3.2"]
+  modeles:
+    - {modele: "17L30", vitesse_max_rpm: 3000, couple_continu_nm: 0.36, couple_crete_nm: 0.53, courant_continu_a: 1.5, courant_crete_a: 1.8, plage_ix: 110}
+    - {modele: "17S30", vitesse_max_rpm: 3000, couple_continu_nm: 0.084, couple_crete_nm: 0.12, courant_continu_a: 0.8, courant_crete_a: 1.0, plage_ix: 60}
+    - {modele: "11L30", vitesse_max_rpm: 3000, couple_continu_nm: 0.055, couple_crete_nm: 0.078, courant_continu_a: 1.2, courant_crete_a: 1.5, plage_ix: 65}
+    - {modele: "11S30", vitesse_max_rpm: 3000, couple_continu_nm: 0.027, couple_crete_nm: 0.039, courant_continu_a: 0.8, courant_crete_a: 1.0, plage_ix: 50}
+    - {modele: "23L30", vitesse_max_rpm: 2000, couple_continu_nm: 0.89, couple_crete_nm: 1.24, courant_continu_a: 2.6, courant_crete_a: 3.4, plage_ix: 180}
+    - {modele: "23S30", vitesse_max_rpm: 3000, couple_continu_nm: 0.3, couple_crete_nm: 0.42, courant_continu_a: 3.9, courant_crete_a: 5.1, plage_ix: 120}
+  conversions:
+    resolution_max: 50000
+    vitesse_rpm: "rpm = S × unité_vitesse(K37) × 60 / résolution(K37)"
+    position_max: "±2^31 / (50000 / résolution)  (le moteur convertit en interne en 50 000 imp/tour)"
+    source: [WEB-SPD, WEB-DC]
+
+# -----------------------------------------------------------------------------
+points_a_confirmer:
+  description: "Captures réelles à demander (champ 'Commande CML' du YAML existant, avec le capteur 'Dernière réponse moteur' ou les logs ESPHome)."
+  liste:
+    - "Écho : forme exacte de l'écho d'une commande (ex : envoyer 'K55.1' puis 'K55.1=5')."
+    - "?85 : bannière complète (ID, FW, HW)."
+    - "?90 : format complet (une ligne par K ? ordre ? suffixe .id ? nombre de lignes ?)."
+    - "?1000 : format complet avec au moins une banque de programme et une banque logique chargées, et la ligne du nombre de pas."
+    - "?0 (ou ?1) : format d'une seule banque."
+    - "?91, ?92, ?93, ?94 : formats (une ligne par registre ?)."
+    - "? et ?P : formats."
+    - "?95, ?96, ?97, ?98, ?99, ?70, ?71, ?74, ?51, ?52 : une ligne de réponse chacune."
+    - "P15.1 (lecture simple d'un registre) et V1.1 contenant une chaîne."
+    - "$ : réponse exacte ('Saved.1' ?)."
+    - "_SKH : réponse à la lecture."
+    - "Réponse à une commande invalide (ex : 'ZZZ.1') et à un K hors plage (ex : K55.1=0)."
+    - "Téléchargement d'une banque : écho ligne par ligne ? message en fin de banque ?"
+    - "K66=2, K67=10 pendant un mouvement : format des lignes de streaming, puis K66=0."
+    - "Comportement après K37 : le redémarrage |4 est-il nécessaire ? (le YAML actuel le fait)."
+    - "Le moteur répond-il aux ?x pendant un mouvement sans perturber celui-ci ? (supposé oui)."

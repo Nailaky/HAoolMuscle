@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+build/
+dist/
+node_modules/
+cool_muscle_studio/frontend/dist/
+esphome/.esphome/
+esphome/secrets.yaml
+.DS_Store
+Thumbs.db

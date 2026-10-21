@@ -1,0 +1,665 @@
+# =============================================================================
+#  ESP32-S3-DevKitC-1  ->  Cool Muscle CM1-C-17L30   (ESPHome + Home Assistant)
+#
+#  Câblage :
+#    GPIO17 -> 100 ohms -> grille MOSFET (drain sur broche 8, source GND),
+#              + 10 kohms vers 3V3
+#    GPIO18 <- broche 5 du moteur, + 2,2 kohms vers 3V3
+#    5V     -> broche 10 du moteur        GND -> broche 11 du moteur
+#    GPIO11 <- sortie digitale du robot "180°"   (active = tirée à GND)
+#    GPIO12 <- sortie digitale du robot "1°"     (active = tirée à GND)
+#    Résistance de tirage 10 kohms de GPIO11 et de GPIO12 vers 3V3 :
+#    sortie robot éteinte = 1, allumée = 0.
+#    La sortie du robot doit être de type NPN / collecteur ouvert, ou passer
+#    par un optocoupleur PC817. JAMAIS de 24 V directement sur une GPIO.
+#
+#  Fonctionnement :
+#    - Sortie robot "180°" ALLUMÉE -> le moteur va à la position 180°
+#      Sortie robot "180°" ÉTEINTE -> le moteur revient à la position 0°
+#    - Chaque impulsion sur la sortie robot "1°" -> calibration +1°
+#      (décale les deux positions 0° et 180° de 1°)
+#    - Les positions sont absolues : aucun décalage ne s'accumule.
+#    - Fonctionne aussi sans Home Assistant (Wi-Fi coupé).
+#
+#  Au démarrage, l'ESP32 vérifie et règle le moteur (si nécessaire) :
+#    K23=1  messages d'état automatiques (défaut usine)
+#    K37=10 résolution 50 000 imp/tour (1° = 138,9 imp)
+#    K52=1  IN1/OUT1 forcés en liaison série
+#  puis considère que le moteur est à 0° si la sortie robot "180°" est
+#  éteinte, ou à 180° si elle est allumée (aucun mouvement au démarrage).
+# =============================================================================
+
+esphome:
+  name: cool-muscle
+  friendly_name: Cool Muscle
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+logger:
+
+# --- Garder ici les lignes générées par l'assistant ESPHome (clé API, OTA) ---
+api:
+  encryption:
+    key: "REMPLACER_PAR_LA_CLE_GENEREE_PAR_ESPHOME"
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Cool-Muscle Fallback"
+
+captive_portal:
+
+# --- Liaison série avec le moteur (38400 bauds, 8N1 : défaut usine) ---------
+uart:
+  id: motor_uart
+  tx_pin: GPIO17
+  rx_pin: GPIO18
+  baud_rate: 38400
+  rx_buffer_size: 512
+
+# --- Mémoire partagée entre les commandes et la boucle de pilotage ----------
+# Codes de commande : 1 = aller à 180°   2 = retour à 0°
+#                     3 = calibration +1°  4 = calibration -1°
+#                     10 = définir le zéro ici
+globals:
+  - id: cmd_queue
+    type: std::vector<int>
+  - id: raw_queue            # lignes CML envoyées telles quelles
+    type: std::vector<std::string>
+  - id: reconfig_req
+    type: bool
+    initial_value: "false"
+  - id: base_mdeg            # position "0°" (calibration comprise), millidegrés
+    type: int64_t
+    initial_value: "0"
+  - id: side_b               # false = position 0°, true = position 180°
+    type: bool
+    initial_value: "false"
+  - id: target_mdeg          # consigne absolue en millidegrés
+    type: int64_t
+    initial_value: "0"
+  - id: target_pulses        # dernière consigne envoyée (impulsions)
+    type: int64_t
+    initial_value: "0"
+
+# --- Réglages modifiables depuis Home Assistant ------------------------------
+number:
+  - platform: template
+    id: vitesse_180
+    name: "Vitesse rotation 180°"
+    icon: mdi:speedometer
+    unit_of_measurement: "tr/min"
+    min_value: 1
+    max_value: 1000
+    step: 1
+    initial_value: 120
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    id: acceleration_180
+    name: "Accélération rotation 180°"
+    icon: mdi:car-speed-limiter
+    unit_of_measurement: "tr/s²"
+    min_value: 1
+    max_value: 200
+    step: 1
+    initial_value: 10
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    id: vitesse_1
+    name: "Vitesse calibration"
+    icon: mdi:speedometer-slow
+    unit_of_measurement: "tr/min"
+    min_value: 1
+    max_value: 200
+    step: 1
+    initial_value: 10
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    id: acceleration_1
+    name: "Accélération calibration"
+    icon: mdi:car-speed-limiter
+    unit_of_measurement: "tr/s²"
+    min_value: 1
+    max_value: 200
+    step: 1
+    initial_value: 5
+    optimistic: true
+    restore_value: true
+    entity_category: config
+
+# --- Commandes depuis Home Assistant -----------------------------------------
+button:
+  - platform: template
+    name: "Aller à 180°"
+    icon: mdi:rotate-right
+    on_press:
+      - lambda: 'if (id(cmd_queue).size() < 32) id(cmd_queue).push_back(1);'
+  - platform: template
+    name: "Retour à 0°"
+    icon: mdi:rotate-left
+    on_press:
+      - lambda: 'if (id(cmd_queue).size() < 32) id(cmd_queue).push_back(2);'
+  # Clic : chaque appui = 1° (les appuis rapides s'additionnent)
+  - platform: template
+    name: "Calibration plus 1"
+    icon: mdi:chevron-right
+    on_press:
+      - lambda: 'if (id(cmd_queue).size() < 32) id(cmd_queue).push_back(3);'
+  - platform: template
+    name: "Calibration moins 1"
+    icon: mdi:chevron-left
+    on_press:
+      - lambda: 'if (id(cmd_queue).size() < 32) id(cmd_queue).push_back(4);'
+  # Maintien : appelé en boucle par la carte du tableau de bord tant que le
+  # doigt reste appuyé. Un seul pas en attente au maximum : le moteur
+  # s'arrête dès qu'on relâche.
+  - platform: template
+    name: "Calibration plus maintien"
+    icon: mdi:chevron-double-right
+    on_press:
+      - lambda: |-
+          for (int c : id(cmd_queue)) if (c == 3 || c == 4) return;
+          id(cmd_queue).push_back(3);
+  - platform: template
+    name: "Calibration moins maintien"
+    icon: mdi:chevron-double-left
+    on_press:
+      - lambda: |-
+          for (int c : id(cmd_queue)) if (c == 3 || c == 4) return;
+          id(cmd_queue).push_back(4);
+  - platform: template
+    name: "Définir le zéro ici"
+    icon: mdi:crosshairs-gps
+    on_press:
+      - lambda: 'if (id(cmd_queue).size() < 32) id(cmd_queue).push_back(10);'
+  - platform: template
+    name: "Lire la position"
+    icon: mdi:map-marker-question
+    on_press:
+      - lambda: 'id(raw_queue).push_back("?96.1");'
+  - platform: template
+    name: "Arrêt d'urgence"
+    icon: mdi:alert-octagon
+    on_press:
+      - lambda: |-
+          id(cmd_queue).clear();
+          id(raw_queue).push_back("*");
+  - platform: template
+    name: "Annuler l'arrêt d'urgence"
+    icon: mdi:alert-octagon-outline
+    on_press:
+      - lambda: 'id(raw_queue).push_back("*1");'
+  - platform: template
+    name: "Réactiver le moteur"
+    icon: mdi:power
+    on_press:
+      - lambda: 'id(raw_queue).push_back("(.1");'
+  - platform: template
+    name: "Reconfigurer le moteur"
+    icon: mdi:cog-refresh
+    entity_category: config
+    on_press:
+      - lambda: 'id(reconfig_req) = true;'
+  - platform: restart
+    name: "Redémarrer l'ESP32"
+
+# Champ texte : toute commande CML tapée ici est envoyée au moteur
+# (comme dans Control Room), ex. ?90.1  K44.1=100  ).1
+text:
+  - platform: template
+    id: commande_cml
+    name: "Commande CML"
+    icon: mdi:console-line
+    mode: text
+    max_length: 60
+    optimistic: true
+    set_action:
+      - lambda: 'if (!x.empty()) id(raw_queue).push_back(x);'
+
+# --- Entrées commandées par le robot (actives à 0 V) + état -----------------
+binary_sensor:
+  - platform: gpio
+    id: robot_180
+    name: "Commande robot 180°"
+    pin:
+      number: GPIO11
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on: 10ms    # anti-parasites : état stable 10 ms minimum
+      - delayed_off: 10ms
+    on_press:
+      - lambda: 'if (id(cmd_queue).size() < 32) id(cmd_queue).push_back(1);'
+    on_release:
+      - lambda: 'if (id(cmd_queue).size() < 32) id(cmd_queue).push_back(2);'
+  - platform: gpio
+    id: robot_1
+    name: "Commande robot 1°"
+    pin:
+      number: GPIO12
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on: 10ms
+      - delayed_off: 20ms
+    on_press:
+      - lambda: 'if (id(cmd_queue).size() < 32) id(cmd_queue).push_back(3);'
+  - platform: template
+    id: en_mouvement
+    name: "En mouvement"
+    icon: mdi:motion
+
+sensor:
+  - platform: template
+    id: position
+    name: "Position"
+    icon: mdi:angle-acute
+    unit_of_measurement: "°"
+    accuracy_decimals: 0
+    update_interval: never
+  - platform: template
+    id: calibration
+    name: "Correction de calibration"
+    icon: mdi:tune-variant
+    unit_of_measurement: "°"
+    accuracy_decimals: 0
+    update_interval: never
+  - platform: template
+    id: position_mesuree
+    name: "Position mesurée"
+    icon: mdi:ruler
+    unit_of_measurement: "°"
+    accuracy_decimals: 2
+    update_interval: never
+  - platform: template
+    id: code_etat
+    name: "Code d'état moteur"
+    icon: mdi:numeric
+    accuracy_decimals: 0
+    update_interval: never
+    entity_category: diagnostic
+  - platform: wifi_signal
+    name: "Signal Wi-Fi"
+    update_interval: 60s
+
+text_sensor:
+  - platform: template
+    id: etat
+    name: "État"
+    icon: mdi:information-outline
+    update_interval: never
+  - platform: template
+    id: derniere_reponse
+    name: "Dernière réponse moteur"
+    icon: mdi:message-reply-text
+    update_interval: never
+    entity_category: diagnostic
+
+# --- Boucle de pilotage (toutes les 10 ms) -----------------------------------
+interval:
+  - interval: 10ms
+    then:
+      - lambda: |-
+          // ---------- réglages fixes ----------
+          const long PPR = 50000;            // impulsions/tour (K37 = 10)
+          const long SPEED_UNIT = 100;       // unité de S en imp/s (K37 = 10)
+          const int FAULT = 1 | 2 | 4 | 16 | 128 | 512;
+          const int KNUM[3] = {23, 37, 52};
+          const long KWANT[3] = {1, 10, 1};
+          const uint32_t now = millis();
+
+          // ---------- état interne (conservé entre deux passages) ----------
+          static int phase = 0;              // 0..6 = démarrage, 10 = prêt
+          static uint32_t phase_t = 0;
+          static int tries = 0, k_index = 0;
+          static bool need_reset = false, force_cfg = false, motor_ok = false;
+          static long kval[100];
+          static bool kknown[100];
+          static int st = 0;                 // 0 repos, 1 mouvement, 2 alarme
+          static uint32_t move_start = 0, move_expected = 0, last_poll = 0;
+          static uint32_t alarm_t = 0, pos_poll_at = 0, raw_info_t = 0;
+          static bool saw_running = false, status_this_move = false, resync = false;
+          static int last_status = -1, recover_tries = 0, fault_count = 0;
+          static int64_t zero_ref = 0;       // base au moment du dernier zéro
+          static std::string line;
+
+          // ---------- outils ----------
+          auto send = [&](const std::string &s) {
+            std::string out = s + "\r";
+            id(motor_uart).write_str(out.c_str());
+            id(motor_uart).flush();
+            ESP_LOGD("cm1", "> %s", s.c_str());
+            delay(3);
+          };
+          auto set_text = [&](const std::string &t) {
+            if (id(etat).state != t) id(etat).publish_state(t);
+          };
+          auto publish_pos = [&]() {
+            id(position).publish_state((double) (id(target_mdeg) - id(base_mdeg)) / 1000.0);
+            id(calibration).publish_state((double) (id(base_mdeg) - zero_ref) / 1000.0);
+          };
+          auto fault_text = [](int s) -> std::string {
+            std::string t = "Alarme :";
+            if (s & 1) t += " erreur de position";
+            if (s & 2) t += " survitesse/surtension";
+            if (s & 4) t += " surcharge";
+            if (s & 16) t += " moteur désactivé";
+            if (s & 128) t += " surchauffe";
+            if (s & 512) t += " arrêt d'urgence";
+            return t;
+          };
+          auto parse_num = [](const std::string &l, size_t from, long &v) -> bool {
+            size_t e = l.find('=', from);
+            if (e == std::string::npos) return false;
+            const char *p = l.c_str() + e + 1;
+            char *end = nullptr;
+            v = strtol(p, &end, 10);
+            return end != p;
+          };
+          auto finish_move = [&](const char *how, bool ok) {
+            st = 0;
+            if (ok) fault_count = 0;
+            id(en_mouvement).publish_state(false);
+            set_text("Prêt");
+            ESP_LOGI("cm1", "Mouvement terminé (%s), position %.0f°", how,
+                     (double) (id(target_mdeg) - id(base_mdeg)) / 1000.0);
+            pos_poll_at = now + 200;                // lecture de la position réelle
+          };
+          auto handle_status = [&](int s) {
+            last_status = s;
+            id(code_etat).publish_state(s);
+            if (phase < 10) return;
+            if (s & FAULT) {
+              if (st != 2) {
+                ESP_LOGW("cm1", "Alarme moteur Ux=%d", s);
+                bool recoverable = (s & (1 | 2 | 4)) && !(s & (16 | 128 | 512));
+                // après réactivation, on refait le mouvement interrompu (3 fois max)
+                resync = (st == 1) && recoverable && fault_count < 3;
+                if (resync) fault_count++;
+                // les pas de calibration en attente sont abandonnés,
+                // les ordres 0°/180° du robot sont conservés
+                std::vector<int> keep;
+                for (int c : id(cmd_queue)) if (c != 3 && c != 4) keep.push_back(c);
+                id(cmd_queue) = keep;
+                st = 2;
+                alarm_t = now;
+                recover_tries = 0;
+                id(en_mouvement).publish_state(false);
+              }
+              set_text(fault_text(s));
+              return;
+            }
+            if (st == 2) {                             // alarme disparue
+              st = 0;
+              set_text("Prêt");
+              if (resync) { resync = false; id(cmd_queue).insert(id(cmd_queue).begin(), 20); }
+              return;
+            }
+            if (st == 1) {
+              status_this_move = true;
+              if (s == 0) { saw_running = true; return; }
+              if ((s & 8) && (saw_running || now - move_start > 30)) finish_move("Ux=8", true);
+            }
+          };
+          auto parse_line = [&](const std::string &l) {
+            motor_ok = true;
+            ESP_LOGD("cm1", "< %s", l.c_str());
+            id(derniere_reponse).publish_state(l);
+            // paramètres K (réponse à ?90 et échos)
+            for (size_t i = 0; i + 1 < l.size(); i++) {
+              if (l[i] != 'K' || l[i + 1] < '0' || l[i + 1] > '9') continue;
+              size_t j = i + 1;
+              int num = 0;
+              while (j < l.size() && l[j] >= '0' && l[j] <= '9') num = num * 10 + (l[j++] - '0');
+              if (j < l.size() && l[j] == '.') { j++; while (j < l.size() && l[j] >= '0' && l[j] <= '9') j++; }
+              if (j < l.size() && l[j] == '=' && num < 100) {
+                const char *p = l.c_str() + j + 1;
+                char *end = nullptr;
+                long v = strtol(p, &end, 10);
+                if (end != p) { kval[num] = v; kknown[num] = true; }
+              }
+              i = j;
+            }
+            long v;
+            size_t p = l.find("Px");
+            if (p != std::string::npos && parse_num(l, p, v))
+              id(position_mesuree).publish_state((double) v * 360.0 / PPR - (double) id(base_mdeg) / 1000.0);
+            // le moteur vient de (re)démarrer -> on refait la configuration
+            if (phase == 10 && l.find("FW") != std::string::npos &&
+                l.find("ID") != std::string::npos && now - raw_info_t > 2000) {
+              ESP_LOGW("cm1", "Redémarrage du moteur détecté");
+              id(cmd_queue).clear();
+              st = 0;
+              resync = false;
+              id(en_mouvement).publish_state(false);
+              phase = 1;
+              phase_t = now;
+              return;
+            }
+            size_t u = l.find("Ux");
+            if (u != std::string::npos && parse_num(l, u, v)) handle_status((int) v);
+          };
+          auto profile_ms = [](double revs, double rpm, double acc) -> uint32_t {
+            double vel = rpm / 60.0;
+            double t = (revs < vel * vel / acc) ? 2.0 * sqrt(revs / acc) : revs / vel + vel / acc;
+            return (uint32_t) (t * 1000.0) + 20;
+          };
+          auto start_move = [&](int cmd) {
+            switch (cmd) {
+              case 1: id(side_b) = true; break;
+              case 2: id(side_b) = false; break;
+              case 3: id(base_mdeg) += 1000; break;
+              case 4: id(base_mdeg) -= 1000; break;
+              case 20: break;                       // refaire le mouvement interrompu
+              default: return;
+            }
+            id(target_mdeg) = id(base_mdeg) + (id(side_b) ? 180000 : 0);
+            int64_t prev = id(target_pulses);
+            id(target_pulses) = llround((double) id(target_mdeg) * PPR / 360000.0);
+            publish_pos();
+            int64_t d = id(target_pulses) - prev;
+            if (d < 0) d = -d;
+            if (d == 0 && cmd != 20) {
+              ESP_LOGI("cm1", "Déjà en position (%.0f°)", (double) (id(target_mdeg) - id(base_mdeg)) / 1000.0);
+              return;
+            }
+            // grand déplacement -> profil "180°", petit -> profil "calibration"
+            bool big = (cmd == 20) || d > PPR / 36;
+            double rpm = big ? id(vitesse_180).state : id(vitesse_1).state;
+            double acc = big ? id(acceleration_180).state : id(acceleration_1).state;
+            if (!(rpm >= 1.0)) rpm = big ? 120.0 : 10.0;
+            if (!(acc >= 1.0)) acc = big ? 10.0 : 5.0;
+            long S = lround(rpm * PPR / 60.0 / SPEED_UNIT); if (S < 1) S = 1;
+            long A = lround(acc * PPR / 1000.0);            if (A < 1) A = 1;
+            if (A > 32767) A = 32767;
+            char b[40];
+            snprintf(b, sizeof(b), "S0.1=%ld", S); send(b);
+            snprintf(b, sizeof(b), "A0.1=%ld", A); send(b);
+            snprintf(b, sizeof(b), "P0.1=%ld", (long) id(target_pulses)); send(b);
+            send("^.1");
+            move_expected = profile_ms(d == 0 ? 0.5 : (double) d / PPR, rpm, acc);
+            move_start = last_poll = now;
+            saw_running = status_this_move = false;
+            st = 1;
+            id(en_mouvement).publish_state(true);
+            set_text("En mouvement");
+            const char *what = cmd == 1 ? "aller à 180°" : cmd == 2 ? "retour à 0°" :
+                               cmd == 3 ? "calibration +1°" : cmd == 4 ? "calibration -1°" : "reprise";
+            ESP_LOGI("cm1", "%s -> position %.0f°, calibration %+.0f°", what,
+                     (double) (id(target_mdeg) - id(base_mdeg)) / 1000.0,
+                     (double) (id(base_mdeg) - zero_ref) / 1000.0);
+          };
+
+          // ---------- 1. réception des réponses du moteur ----------
+          uint8_t c;
+          while (id(motor_uart).available() && id(motor_uart).read_byte(&c)) {
+            if (c == '\r' || c == '\n') {
+              if (!line.empty()) { std::string l = line; line.clear(); parse_line(l); }
+            } else if (c >= 32 && c < 127 && line.size() < 120) {
+              line += (char) c;
+            }
+          }
+
+          // ---------- 2. commandes CML manuelles (Home Assistant) ----------
+          for (auto &r : id(raw_queue)) {
+            if (r.rfind("?85", 0) == 0) raw_info_t = now;
+            send(r);
+          }
+          id(raw_queue).clear();
+
+          // ---------- 3. démarrage / configuration du moteur ----------
+          if (phase < 10) {
+            switch (phase) {
+              case 0:
+                set_text("Démarrage...");
+                phase_t = now;
+                phase = 1;
+                break;
+              case 1:                                   // laisse le moteur démarrer
+                if (now - phase_t > 1500) {
+                  for (int i = 0; i < 100; i++) kknown[i] = false;
+                  send("?85.1");
+                  tries = 1;
+                  phase_t = now;
+                  phase = 2;
+                }
+                break;
+              case 2:                                   // le moteur répond-il ?
+                if (motor_ok) {
+                  send("?90.1");
+                  phase_t = now;
+                  phase = 3;
+                } else if (now - phase_t > 600) {
+                  if (tries < 3) { send("?85.1"); tries++; phase_t = now; }
+                  else {
+                    ESP_LOGW("cm1", "Aucune réponse du moteur : mode temporisé");
+                    phase = 4; k_index = 0; need_reset = false; phase_t = now;
+                  }
+                }
+                break;
+              case 3:                                   // lecture des paramètres K
+                if (now - phase_t > 1500) { phase = 4; k_index = 0; need_reset = false; phase_t = now; }
+                break;
+              case 4:                                   // écriture si nécessaire
+                if (now - phase_t > 100) {
+                  phase_t = now;
+                  if (k_index < 3) {
+                    int n = KNUM[k_index];
+                    if (force_cfg || !kknown[n] || kval[n] != KWANT[k_index]) {
+                      char b[24];
+                      snprintf(b, sizeof(b), "K%d.1=%ld", n, KWANT[k_index]);
+                      ESP_LOGI("cm1", "Écriture %s", b);
+                      send(b);
+                      if (n == 37) need_reset = true;
+                    }
+                    k_index++;
+                  } else if (need_reset) {
+                    ESP_LOGI("cm1", "Redémarrage logiciel du moteur (K37)");
+                    send("|4.1");
+                    phase = 5;
+                  } else {
+                    phase = 6;
+                  }
+                }
+                break;
+              case 5:
+                if (now - phase_t > 3000) phase = 6;
+                break;
+              case 6:                                   // activation + origine
+                send("(.1");
+                send("|2.1");
+                // le moteur est là où le robot le demande : aucun mouvement
+                id(side_b) = id(robot_180).state;
+                id(target_mdeg) = 0;
+                id(target_pulses) = 0;
+                id(base_mdeg) = id(side_b) ? -180000 : 0;
+                zero_ref = id(base_mdeg);
+                id(cmd_queue).clear();
+                force_cfg = false;
+                resync = false;
+                fault_count = 0;
+                st = 0;
+                phase = 10;
+                publish_pos();
+                id(en_mouvement).publish_state(false);
+                set_text(motor_ok ? "Prêt" : "Prêt (sans retour moteur)");
+                pos_poll_at = now + 300;
+                break;
+            }
+            return;
+          }
+
+          // ---------- 4. fonctionnement normal ----------
+          if (st == 0) {
+            if (id(reconfig_req)) {
+              id(reconfig_req) = false;
+              force_cfg = true;
+              set_text("Reconfiguration...");
+              phase = 4; k_index = 0; need_reset = false; phase_t = now;
+              return;
+            }
+            if (!id(cmd_queue).empty()) {
+              int cmd = id(cmd_queue).front();
+              id(cmd_queue).erase(id(cmd_queue).begin());
+              if (cmd == 10) {                          // position actuelle = 0°
+                send("|2.1");
+                id(base_mdeg) = 0;
+                zero_ref = 0;
+                id(target_mdeg) = 0;
+                id(target_pulses) = 0;
+                id(side_b) = false;
+                publish_pos();
+                pos_poll_at = now + 200;
+                ESP_LOGI("cm1", "Zéro défini ici, calibration remise à 0");
+              } else {
+                start_move(cmd);
+              }
+            } else if (pos_poll_at != 0 && (int32_t) (now - pos_poll_at) >= 0) {
+              pos_poll_at = 0;
+              if (motor_ok) send("?96.1");
+            }
+          } else if (st == 1) {
+            uint32_t el = now - move_start;
+            if (!motor_ok) {
+              if (el > move_expected + 300) finish_move("temporisé, pas de retour moteur", true);
+            } else {
+              if (el > move_expected + 150 && now - last_poll > 150) {
+                last_poll = now;
+                send("?99.1");
+              }
+              if (!status_this_move && el > move_expected + 1500) {
+                finish_move("temporisé, aucun message d'état", true);
+              } else if (el > move_expected + 5000) {
+                finish_move("délai dépassé", false);
+                set_text("Avertissement : position non atteinte");
+              }
+            }
+          } else if (st == 2) {
+            // surcharge / erreur de position / survitesse : réactivation automatique (3 essais)
+            if (now - alarm_t > 1000) {
+              alarm_t = now;
+              bool recoverable = (last_status & (1 | 2 | 4)) && !(last_status & (16 | 128 | 512));
+              if (recoverable && recover_tries < 3) {
+                recover_tries++;
+                ESP_LOGW("cm1", "Réactivation du moteur (essai %d)", recover_tries);
+                send("(.1");
+              }
+            }
+          }

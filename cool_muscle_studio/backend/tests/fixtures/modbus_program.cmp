@@ -1,0 +1,47 @@
+//set the logic scan rate to 1ms
+K87.1=1
+//set logic bank 1 to scan on power up
+K85.1=1
+//switch off all automatic motor event reporting
+K23.1=0
+
+/*create variables for the old/previous target
+control word, position, speed, acceleration
+*/
+var old_ControlWord R1.1 //old control word
+R1.1=0
+var old_TargetPos P1.1 //old position
+P1.1=0
+var old_TargetSpd S1.1 //old speed
+S1.1=0
+var old_TargetAcc A1.1 //old acceleration
+A1.1=0
+
+var ControlWord R0.1 //control word
+R0.1=0
+var TargetPos P0.1 //position
+P0.1=0
+var TargetSpd S0.1 //speed
+S0.1=0
+var TargetAcc A0.1 //acceleration
+A0.1=0
+
+L1.1
+ControlWord!= old_ControlWord, CL2.1, T0.1 //scan control word
+TargetPos!= old_TargetPos, CL3.1, T0.1 //scan position
+END.1
+
+L2.1
+old_ControlWord= ControlWord;
+old_ControlWord== 1, ^.1, T0.1 //run
+old_ControlWord== 2, ].1, T0.1 //stop
+old_ControlWord== 3, (.1, T0.1 //enable
+old_ControlWord== 4, ).1, T0.1 //disable
+old_ControlWord== 5,|.1,T0.1 //home
+END.1
+
+L3.1
+old_TargetPos= TargetPos;
+ControlWord== 1, ^.1, T0.1 //execute move is ControlWord equals 1
+END.1
+$.1

@@ -1,0 +1,31 @@
+B100.1,L100.1 //Clear any existing program and logic banks
+B100.2,L100.2
+K85.1=1 //Run Logic Bank 1 on power up
+R1.2=0,R1.1=0 //Radii not needed for this method
+A1.1=50,A1.2=50 //Define accelerations and speeds
+S1.1=30,S1.2=30
+P1.1=0 //First position of first arc
+P1.2=1600
+P2.1=3200 //Arc End Position
+P3.1=6400 //Arc End Position
+N1.1=1600 //Center point of first figure eight
+N1.2=1600
+N2.1=4800 //Center point of other side of the figure-eight
+l1.1 //Run Program Bank 1
+[1.1 //Jump to Logic Bank 2
+jl2
+end.1
+l2.1 //Empty Logic Bank so that we don't keep executing program bank 1
+end.1
+B1.1 //Home both axes
+|2.1,|2.2 //call accelerations and speeds
+A1.2,A1.1
+S1.2,S1.1
+X0.1
+N1.2,N1.1,@1.2,@2.1;
+N1.2,N2.1,@1.2-,@3.1-;
+N1.2,N2.1,@1.2-,@2.1-;
+N1.2,N1.1,@1.2,@1.1;
+X-
+END.1
+$.1

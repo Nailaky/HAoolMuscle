@@ -263,6 +263,7 @@ banques:
       - "Il est recommandé de commencer un fichier par B100 et L100."
       - "Terminer par $ pour sauvegarder en EEPROM."
     source: ["UG §10.1.1", "UG §10.3", "UG §10.5.2"]
+  commandes_programme_source: ["UG §10.5.2", "UG §17", RT3]
   commandes_programme:
     - {cmd: "B#",  description: "Début de la banque de programme #"}
     - {cmd: "P#",  description: "Aller à la position P# (attend l'arrivée) ; P#+ = incrémental"}
@@ -279,7 +280,7 @@ banques:
     - {cmd: "J#",  description: "Sauter à la banque de programme # sans retour"}
     - {cmd: "@#",  description: "Mouvement coordonné vers P# (2 moteurs consécutifs, dans une banque de programme uniquement) ; @#+ / @#- sens de l'arc"}
     - {cmd: "B100", description: "Effacer toutes les banques de programme"}
-    source: ["UG §10.5.2", "UG §17", RT3]
+  commandes_communes_source: ["UG §10.6"]
   commandes_communes:
     - {cmd: "I#",  description: "Branche sur l'entrée # (I1..I4), ex : I1.1,C2.1,C3.1"}
     - {cmd: "W0 / W#", description: "Attendre que la condition soit vraie / au plus T# ms"}
@@ -287,14 +288,13 @@ banques:
     - {cmd: "END", description: "Fin de banque"}
     - {cmd: ":",   description: "Jonction : deux commandes simultanées (I1.1,?96:?97,W0)"}
     - {cmd: "/",   description: "Commentaire (non envoyé au moteur, 30 caractères, hérité)"}
-    source: ["UG §10.6"]
+  commandes_logiques_source: ["UG §10.7.2"]
   commandes_logiques:
     - {cmd: "L#",  description: "Début de la banque logique # (boucle en continu, période K87)"}
     - {cmd: ";",   description: "Fin d'une opération mathématique : ne pas renvoyer le résultat sur le port série (sens différent du ; de programme)"}
     - {cmd: "CL#", description: "Appeler la banque logique #"}
     - {cmd: "JL#", description: "Sauter à la banque logique #"}
     - {cmd: "L100", description: "Effacer toutes les banques logiques"}
-    source: ["UG §10.7.2"]
   branchements:
     format: "REQUÊTE, SI_VRAI, SI_FAUX"
     operateurs: ["I# (entrée seule)", "&&", "||", "!!", ">", ">=", "==", "<", "<=", "!= (vu dans l'exemple Modbus)"]

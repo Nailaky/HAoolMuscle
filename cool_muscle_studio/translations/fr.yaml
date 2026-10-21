@@ -1,0 +1,13 @@
+configuration:
+  ponts:
+    name: Ponts ESP32
+    description: Liste des ponts série (nom, hôte, port TCP du composant cm1_bridge).
+  dossier:
+    name: Dossier de stockage
+    description: Fichiers CML, sauvegardes et journaux (par défaut /share/cool_muscle).
+  sortie_auto_maintenance_s:
+    name: Sortie automatique de maintenance (s)
+    description: Délai après déconnexion de l'app avant que le pont quitte le mode maintenance. 0 = jamais.
+  mode_expert:
+    name: Mode expert
+    description: Désactive les confirmations dans le terminal.

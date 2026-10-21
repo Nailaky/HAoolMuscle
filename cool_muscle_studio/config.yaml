@@ -1,0 +1,36 @@
+name: Cool Muscle Studio
+version: 0.0.1
+slug: cool_muscle_studio
+description: Configuration, programmation et diagnostic des servomoteurs Cool Muscle CM1 via un pont ESP32
+url: https://github.com/Nailaky/HAoolMuscle
+stage: experimental
+arch:
+  - aarch64
+  - amd64
+init: false
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:engine
+panel_title: Cool Muscle
+panel_admin: true
+map:
+  - type: share
+    read_only: false
+  - type: app_config
+    read_only: false
+options:
+  ponts:
+    - nom: Cool Muscle
+      hote: cool-muscle.local
+      port: 6638
+  dossier: /share/cool_muscle
+  sortie_auto_maintenance_s: 60
+  mode_expert: false
+schema:
+  ponts:
+    - nom: str
+      hote: str
+      port: port
+  dossier: str?
+  sortie_auto_maintenance_s: int(0,3600)?
+  mode_expert: bool?
