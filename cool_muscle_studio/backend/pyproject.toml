@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cmstudio"
-version = "0.0.1"
+version = "0.1.0"
 description = "Cool Muscle Studio : bibliothèque CML, simulateur CM1 et backend de l'app Home Assistant"
 requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0",
+    "aiohttp>=3.10",
 ]
 
 [project.optional-dependencies]
@@ -18,9 +19,13 @@ dev = [
 
 [project.scripts]
 cm1sim = "cmstudio.sim.__main__:main"
+cmstudio = "cmstudio.app.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["cmstudio*"]
+
+[tool.setuptools.package-data]
+cmstudio = ["data/*.yaml", "app/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

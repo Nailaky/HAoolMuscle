@@ -12,3 +12,5 @@ esphome/.esphome/
 esphome/secrets.yaml
 .DS_Store
 Thumbs.db
+esphome/.dev/
+cool_muscle_studio/backend/var/

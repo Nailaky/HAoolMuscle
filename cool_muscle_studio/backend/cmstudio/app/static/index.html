@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cool Muscle Studio</title>
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Cool Muscle Studio <span id="version" class="muted"></span></div>
+  <label class="field">Pont
+    <select id="bridge-select"></select>
+  </label>
+  <span id="conn-badge" class="badge off">déconnecté</span>
+  <span id="mode-badge" class="badge">—</span>
+  <span id="busy-badge" class="badge hidden">en mouvement</span>
+  <button id="maint-btn" class="btn" title="Entrer ou sortir du mode maintenance (jamais pendant un mouvement)">Mode maintenance</button>
+  <button id="detect-btn" class="btn" title="Envoie ?85.1 à ?85.15 et liste les moteurs qui répondent">Détecter les moteurs</button>
+  <span id="user" class="muted"></span>
+</header>
+
+<div class="estop">
+  <button id="estop-btn" class="estop-btn" title="Envoie * : arrêt immédiat de tous les moteurs de la chaîne">■ ARRÊT D'URGENCE</button>
+  <button id="estop-cancel-btn" class="btn" title="Envoie *1 : annule l'arrêt d'urgence (rien ne redémarre)">Annuler l'arrêt (*1)</button>
+  <span id="estop-info" class="muted"></span>
+</div>
+
+<main class="layout">
+  <section class="terminal">
+    <div class="toolbar">
+      <label><input type="checkbox" id="f-local" checked> trafic de l'ESP32</label>
+      <label><input type="checkbox" id="f-echo" checked> échos</label>
+      <label><input type="checkbox" id="f-wrap"> retour à la ligne</label>
+      <input id="f-search" type="search" placeholder="filtrer…">
+      <span class="spacer"></span>
+      <label class="expert"><input type="checkbox" id="expert"> mode expert (sans confirmation)</label>
+      <button id="clear-btn" class="btn small">Effacer</button>
+      <button id="export-btn" class="btn small">Exporter</button>
+    </div>
+    <div id="log" class="log" tabindex="0"></div>
+    <div class="input-area">
+      <div id="preview" class="preview"><span class="muted">tapez une commande CML, ↑/↓ historique, Tab complète</span></div>
+      <div class="input-row">
+        <span class="prompt">&gt;</span>
+        <input id="cmd" type="text" autocomplete="off" spellcheck="false" maxlength="60" placeholder="?85.1">
+        <button id="send-btn" class="btn">Envoyer</button>
+      </div>
+      <ul id="suggest" class="suggest hidden"></ul>
+    </div>
+  </section>
+
+  <aside class="side">
+    <h2>Moteurs détectés</h2>
+    <ul id="motors" class="list"><li class="muted">aucune détection lancée</li></ul>
+    <h2>Dernières écritures</h2>
+    <ul id="journal" class="list small"></ul>
+    <h2>Aide</h2>
+    <p class="muted small">
+      En mode <b>normal</b>, seules les lectures (<code>?96.1</code>, <code>K37.1</code>, <code>_SKH</code>) et l'arrêt d'urgence passent.
+      Le mode <b>maintenance</b> suspend la logique robot de l'ESP32 et donne la main au terminal ; il est refusé pendant un mouvement.
+      Les commandes qui font bouger le moteur ou modifient sa configuration demandent une confirmation (sauf mode expert).
+    </p>
+  </aside>
+</main>
+
+<dialog id="confirm">
+  <form method="dialog">
+    <h3 id="confirm-title">Confirmer l'envoi</h3>
+    <p id="confirm-text"></p>
+    <pre id="confirm-line"></pre>
+    <p id="confirm-warn" class="warn hidden"></p>
+    <menu>
+      <button value="cancel" class="btn">Annuler</button>
+      <button value="ok" class="btn primary" id="confirm-ok">Envoyer</button>
+    </menu>
+  </form>
+</dialog>
+
+<script src="static/cml.js"></script>
+<script src="static/app.js"></script>
+</body>
+</html>

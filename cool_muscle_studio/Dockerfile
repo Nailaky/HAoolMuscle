@@ -1,9 +1,10 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.13-alpine3.21
 FROM ${BUILD_FROM}
 
-# Étape 0 : squelette. Le serveur web (étape 1) et le frontend (build Vite)
-# seront ajoutés ici ; les images multi-arch seront construites par GitHub
-# Actions et publiées sur ghcr.io (voir docs/architecture.md §4.2).
+# Le frontend est servi tel quel (pas d'étape de build) : cmstudio/app/static.
+# Les images multi-arch pourront être construites par GitHub Actions et publiées
+# sur ghcr.io (voir docs/architecture.md §4.2) ; en attendant le Supervisor
+# construit l'image sur l'appareil.
 
 WORKDIR /app
 COPY backend/pyproject.toml /app/backend/
@@ -14,5 +15,7 @@ RUN pip install --no-cache-dir /app/backend
 
 ENV CMSTUDIO_REFERENCE=/app/backend/cmstudio/data/cml_reference.yaml
 
-# Remplacé à l'étape 1 par le serveur web de l'app.
-CMD ["python", "-c", "print('Cool Muscle Studio : squelette, serveur à venir (étape 1)')"]
+# Ingress : le serveur écoute sur 8099 et n'accepte que la passerelle 172.30.32.2
+# (vérifié dans l'app quand SUPERVISOR_TOKEN est présent).
+EXPOSE 8099
+CMD ["python", "-m", "cmstudio.app", "--host", "0.0.0.0", "--port", "8099"]

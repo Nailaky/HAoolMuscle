@@ -25,10 +25,11 @@ conditionnent l'étape 2 (le terminal de l'étape 1 fonctionne sans).
    l'ESP32 considère la position lue à la sortie de maintenance comme sa
    nouvelle référence 0° si et seulement si un `|2` a été envoyé pendant la
    session (l'app le signale) ; sinon rien ne change. D'accord ?
-6. **Frontend.** Svelte + Vite (build à la génération de l'image, images
-   pré-construites sur GHCR par GitHub Actions) ou pages HTML/JS sans build
-   (plus simple à modifier à la main, moins confortable pour l'éditeur et les
-   graphiques). Je recommande la première.
+6. **Frontend.** Décision prise à l'étape 1 : pages HTML/JS sans étape de
+   build (servies telles quelles par l'app), ce qui simplifie la construction
+   de l'image par le Supervisor. Les graphiques utiliseront une bibliothèque
+   légère embarquée (uPlot). À reconsidérer si l'éditeur CML devient trop
+   complexe.
 7. **Multi-clients.** Plusieurs onglets/navigateurs sur le même pont doivent-ils
    pouvoir émettre en même temps en maintenance, ou un seul « pilote » à la
    fois (les autres en lecture) ? Je recommande un seul pilote, avec reprise

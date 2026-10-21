@@ -14,3 +14,20 @@ jobs:
           python-version: "3.13"
       - run: pip install -e cool_muscle_studio/backend[dev]
       - run: pytest cool_muscle_studio/backend -q
+
+  esphome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configuration de développement (composant local, clé API factice)
+        run: |
+          cd esphome
+          mkdir -p .dev
+          printf 'wifi_ssid: "x"\nwifi_password: "xxxxxxxx"\n' > .dev/secrets.yaml
+          KEY=$(python3 -c 'import base64,os;print(base64.b64encode(os.urandom(32)).decode())')
+          sed -e 's|source: github://Nailaky/HAoolMuscle@main|source: {type: local, path: ../components}|' \
+              -e '/^    path: esphome\/components$/d' -e '/^    refresh: 1h$/d' \
+              -e "s|key: \"REMPLACER_PAR_LA_CLE_GENEREE_PAR_ESPHOME\"|key: \"$KEY\"|" \
+              cool-muscle.yaml > .dev/cool-muscle.yaml
+      - name: Validation avec l'image officielle
+        run: docker run --rm -v "$PWD/esphome:/config" ghcr.io/esphome/esphome:2026.10.0 config .dev/cool-muscle.yaml

@@ -27,6 +27,13 @@
 #    K52=1  IN1/OUT1 forcés en liaison série
 #  puis considère que le moteur est à 0° si la sortie robot "180°" est
 #  éteinte, ou à 180° si elle est allumée (aucun mouvement au démarrage).
+#
+#  Pont série (composant cm1_bridge, port TCP 6638) :
+#    L'application Cool Muscle Studio (Home Assistant) se connecte à ce port.
+#    En mode normal elle ne peut que lire (?96, ?99, K37...) ; le mode
+#    maintenance (entité "Mode maintenance", jamais pendant un mouvement) lui
+#    donne la main et suspend la logique robot. À la sortie, l'ESP32 relit la
+#    configuration et la position du moteur sans le faire bouger.
 # =============================================================================
 
 esphome:
@@ -56,6 +63,13 @@ wifi:
 
 captive_portal:
 
+# --- Composant externe : pont série arbitré (dépôt GitHub du projet) --------
+external_components:
+  - source: github://Nailaky/HAoolMuscle@main
+    path: esphome/components
+    components: [cm1_bridge]
+    refresh: 1h
+
 # --- Liaison série avec le moteur (38400 bauds, 8N1 : défaut usine) ---------
 uart:
   id: motor_uart
@@ -63,6 +77,19 @@ uart:
   rx_pin: GPIO18
   baud_rate: 38400
   rx_buffer_size: 512
+
+# --- Pont TCP vers l'application ---------------------------------------------
+cm1_bridge:
+  id: cm1
+  uart_id: motor_uart
+  port: 6638
+  max_clients: 4
+  min_spacing: 3ms
+  maintenance_timeout: 60s      # sortie automatique si l'application disparaît (0s = jamais)
+  # allowed_ips: [192.168.1.0/24]   # limiter aux adresses de Home Assistant
+  on_line:
+    then:
+      - lambda: 'if (id(rx_lines).size() < 64) id(rx_lines).push_back(x);'
 
 # --- Mémoire partagée entre les commandes et la boucle de pilotage ----------
 # Codes de commande : 1 = aller à 180°   2 = retour à 0°
@@ -72,6 +99,8 @@ globals:
   - id: cmd_queue
     type: std::vector<int>
   - id: raw_queue            # lignes CML envoyées telles quelles
+    type: std::vector<std::string>
+  - id: rx_lines             # lignes reçues du moteur (remplies par cm1_bridge)
     type: std::vector<std::string>
   - id: reconfig_req
     type: bool
@@ -138,6 +167,14 @@ number:
     initial_value: 5
     optimistic: true
     restore_value: true
+    entity_category: config
+
+# --- Mode maintenance (pilotable depuis HA et depuis l'application) ----------
+switch:
+  - platform: cm1_bridge
+    cm1_bridge_id: cm1
+    name: "Mode maintenance"
+    icon: mdi:wrench
     entity_category: config
 
 # --- Commandes depuis Home Assistant -----------------------------------------
@@ -218,6 +255,7 @@ button:
 
 # Champ texte : toute commande CML tapée ici est envoyée au moteur
 # (comme dans Control Room), ex. ?90.1  K44.1=100  ).1
+# En mode maintenance, seul "*" passe (l'application a la main).
 text:
   - platform: template
     id: commande_cml
@@ -265,6 +303,10 @@ binary_sensor:
     id: en_mouvement
     name: "En mouvement"
     icon: mdi:motion
+  - platform: cm1_bridge
+    cm1_bridge_id: cm1
+    connected:
+      name: "Application connectée"
 
 sensor:
   - platform: template
@@ -298,6 +340,10 @@ sensor:
   - platform: wifi_signal
     name: "Signal Wi-Fi"
     update_interval: 60s
+  - platform: cm1_bridge
+    cm1_bridge_id: cm1
+    connection_count:
+      name: "Clients connectés"
 
 text_sensor:
   - platform: template
@@ -326,7 +372,7 @@ interval:
           const uint32_t now = millis();
 
           // ---------- état interne (conservé entre deux passages) ----------
-          static int phase = 0;              // 0..6 = démarrage, 10 = prêt
+          static int phase = 0;              // 0..7 = démarrage/resync, 10 = prêt
           static uint32_t phase_t = 0;
           static int tries = 0, k_index = 0;
           static bool need_reset = false, force_cfg = false, motor_ok = false;
@@ -338,16 +384,13 @@ interval:
           static bool saw_running = false, status_this_move = false, resync = false;
           static int last_status = -1, recover_tries = 0, fault_count = 0;
           static int64_t zero_ref = 0;       // base au moment du dernier zéro
-          static std::string line;
+          static bool was_maint = false;     // mode maintenance au passage précédent
+          static bool after_maint = false;   // resynchronisation après maintenance
+          static bool k_fixed = false;       // un K a été corrigé pendant la resync
+          static bool px_wanted = false;     // position attendue (resync)
 
           // ---------- outils ----------
-          auto send = [&](const std::string &s) {
-            std::string out = s + "\r";
-            id(motor_uart).write_str(out.c_str());
-            id(motor_uart).flush();
-            ESP_LOGD("cm1", "> %s", s.c_str());
-            delay(3);
-          };
+          auto send = [&](const std::string &s) { id(cm1).send_local(s); };
           auto set_text = [&](const std::string &t) {
             if (id(etat).state != t) id(etat).publish_state(t);
           };
@@ -420,7 +463,6 @@ interval:
           };
           auto parse_line = [&](const std::string &l) {
             motor_ok = true;
-            ESP_LOGD("cm1", "< %s", l.c_str());
             id(derniere_reponse).publish_state(l);
             // paramètres K (réponse à ?90 et échos)
             for (size_t i = 0; i + 1 < l.size(); i++) {
@@ -439,8 +481,15 @@ interval:
             }
             long v;
             size_t p = l.find("Px");
-            if (p != std::string::npos && parse_num(l, p, v))
+            if (p != std::string::npos && parse_num(l, p, v)) {
               id(position_mesuree).publish_state((double) v * 360.0 / PPR - (double) id(base_mdeg) / 1000.0);
+              if (px_wanted) {                         // resync : la position lue devient la consigne
+                px_wanted = false;
+                id(target_pulses) = v;
+                id(target_mdeg) = llround((double) v * 360000.0 / PPR);
+                publish_pos();
+              }
+            }
             // le moteur vient de (re)démarrer -> on refait la configuration
             if (phase == 10 && l.find("FW") != std::string::npos &&
                 l.find("ID") != std::string::npos && now - raw_info_t > 2000) {
@@ -507,24 +556,51 @@ interval:
                      (double) (id(base_mdeg) - zero_ref) / 1000.0);
           };
 
-          // ---------- 1. réception des réponses du moteur ----------
-          uint8_t c;
-          while (id(motor_uart).available() && id(motor_uart).read_byte(&c)) {
-            if (c == '\r' || c == '\n') {
-              if (!line.empty()) { std::string l = line; line.clear(); parse_line(l); }
-            } else if (c >= 32 && c < 127 && line.size() < 120) {
-              line += (char) c;
-            }
+          // ---------- 1. réception des réponses du moteur (via cm1_bridge) ----------
+          if (!id(rx_lines).empty()) {
+            std::vector<std::string> lines;
+            lines.swap(id(rx_lines));
+            for (auto &l : lines) parse_line(l);
           }
 
-          // ---------- 2. commandes CML manuelles (Home Assistant) ----------
+          // ---------- 2. mode maintenance : l'application a la main ----------
+          id(cm1).set_busy(st == 1 || phase < 10);
+          id(cm1).set_alarm(st == 2);
+          bool maint = id(cm1).maintenance();
+          if (maint) {
+            if (!was_maint) {
+              was_maint = true;
+              ESP_LOGW("cm1", "Mode maintenance : logique robot suspendue");
+              set_text("Maintenance");
+            }
+            id(cmd_queue).clear();                      // ordres du robot ignorés
+            for (auto &r : id(raw_queue)) if (r == "*" || r == "*1") send(r);
+            id(raw_queue).clear();
+            return;
+          }
+          if (was_maint) {                              // sortie : resynchronisation
+            was_maint = false;
+            after_maint = true;
+            k_fixed = false;
+            motor_ok = false;
+            id(cmd_queue).clear();
+            st = 0;
+            resync = false;
+            id(en_mouvement).publish_state(false);
+            set_text("Resynchronisation...");
+            ESP_LOGI("cm1", "Sortie du mode maintenance : relecture du moteur");
+            phase = 1;
+            phase_t = now - 1500;                       // pas d'attente de démarrage
+          }
+
+          // ---------- 3. commandes CML manuelles (Home Assistant) ----------
           for (auto &r : id(raw_queue)) {
             if (r.rfind("?85", 0) == 0) raw_info_t = now;
             send(r);
           }
           id(raw_queue).clear();
 
-          // ---------- 3. démarrage / configuration du moteur ----------
+          // ---------- 4. démarrage / configuration / resynchronisation ----------
           if (phase < 10) {
             switch (phase) {
               case 0:
@@ -536,6 +612,7 @@ interval:
                 if (now - phase_t > 1500) {
                   for (int i = 0; i < 100; i++) kknown[i] = false;
                   send("?85.1");
+                  raw_info_t = now;
                   tries = 1;
                   phase_t = now;
                   phase = 2;
@@ -547,7 +624,7 @@ interval:
                   phase_t = now;
                   phase = 3;
                 } else if (now - phase_t > 600) {
-                  if (tries < 3) { send("?85.1"); tries++; phase_t = now; }
+                  if (tries < 3) { send("?85.1"); raw_info_t = now; tries++; phase_t = now; }
                   else {
                     ESP_LOGW("cm1", "Aucune réponse du moteur : mode temporisé");
                     phase = 4; k_index = 0; need_reset = false; phase_t = now;
@@ -567,6 +644,7 @@ interval:
                       snprintf(b, sizeof(b), "K%d.1=%ld", n, KWANT[k_index]);
                       ESP_LOGI("cm1", "Écriture %s", b);
                       send(b);
+                      if (after_maint && kknown[n]) k_fixed = true;
                       if (n == 37) need_reset = true;
                     }
                     k_index++;
@@ -575,12 +653,12 @@ interval:
                     send("|4.1");
                     phase = 5;
                   } else {
-                    phase = 6;
+                    phase = after_maint ? 7 : 6;
                   }
                 }
                 break;
               case 5:
-                if (now - phase_t > 3000) phase = 6;
+                if (now - phase_t > 3000) phase = after_maint ? 7 : 6;
                 break;
               case 6:                                   // activation + origine
                 send("(.1");
@@ -602,11 +680,23 @@ interval:
                 set_text(motor_ok ? "Prêt" : "Prêt (sans retour moteur)");
                 pos_poll_at = now + 300;
                 break;
+              case 7:                                   // après maintenance : position et état, sans bouger
+                after_maint = false;
+                force_cfg = false;
+                fault_count = 0;
+                st = 0;
+                px_wanted = motor_ok;
+                if (motor_ok) { send("?96.1"); send("?99.1"); }
+                phase = 10;
+                id(en_mouvement).publish_state(false);
+                set_text(k_fixed ? "Prêt (configuration corrigée après maintenance)" : "Prêt");
+                if (k_fixed) ESP_LOGW("cm1", "Un paramètre K modifié en maintenance a été remis à sa valeur");
+                break;
             }
             return;
           }
 
-          // ---------- 4. fonctionnement normal ----------
+          // ---------- 5. fonctionnement normal ----------
           if (st == 0) {
             if (id(reconfig_req)) {
               id(reconfig_req) = false;
