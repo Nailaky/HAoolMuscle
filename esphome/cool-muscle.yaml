@@ -65,8 +65,7 @@ captive_portal:
 
 # --- Composant externe : pont série arbitré (dépôt GitHub du projet) --------
 external_components:
-  - source: github://Nailaky/HAoolMuscle@main
-    path: esphome/components
+  - source: github://Nailaky/HAoolMuscle@main    # cherche dans esphome/components
     components: [cm1_bridge]
     refresh: 1h
 

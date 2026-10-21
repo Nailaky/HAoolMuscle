@@ -26,8 +26,8 @@ branche `main`) et que Home Assistant est en version OS ou Supervised.
    **Clients connectés**. Les anciennes entités gardent leurs noms.
 
 Si la compilation échoue sur `external_components`, vérifier que le dépôt est
-public ou que ESPHome a accès à GitHub, et que `path: esphome/components` est
-bien présent.
+public ou que ESPHome a accès à GitHub. Le composant est cherché dans
+`esphome/components`, l'un des deux emplacements par défaut d'ESPHome.
 
 ## 2. Installer l'app
 
