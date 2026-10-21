@@ -1,5 +1,11 @@
 # Journal des modifications
 
+## 0.1.1 (2026-10-21)
+
+- Images pré-construites (amd64, aarch64) publiées sur ghcr.io par GitHub
+  Actions : le Supervisor n'a plus besoin de construire l'image sur
+  l'appareil.
+
 ## 0.1.0 (étape 1, 2026-10-21)
 
 - Composant ESPHome `cm1_bridge` : pont TCP arbitré (port 6638), mode

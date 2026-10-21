@@ -1,0 +1,40 @@
+name: Images de l'app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cool_muscle_studio/**"
+      - ".github/workflows/build-app.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Construire ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Connexion au registre GitHub (ghcr.io)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construction et publication (home-assistant/builder)
+        uses: home-assistant/builder@2025.03.0
+        with:
+          args: |
+            --${{ matrix.arch }} \
+            --target cool_muscle_studio \
+            --image "cool_muscle_studio/{arch}" \
+            --docker-hub "ghcr.io/nailaky" \
+            --addon
