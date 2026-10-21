@@ -17,7 +17,7 @@ depuis Home Assistant, via un pont ESP32-S3 (ESPHome, composant `cm1_bridge`).
 
 | Option | Description |
 |---|---|
-| `ponts` | Liste des ponts ESP32 : `nom`, `hote`, `port` (6638 par défaut). |
+| `ponts` | Liste des ponts ESP32 : `nom`, `hote` (de préférence l'adresse IP de l'ESP32 ; `cool-muscle.local` n'est pas toujours résolu depuis le conteneur), `port` (6638 par défaut). |
 | `dossier` | Dossier des fichiers CML, sauvegardes et journaux (`/share/cool_muscle`). |
 | `sortie_auto_maintenance_s` | Pour information : le délai de sortie automatique est réglé dans le YAML ESPHome (`maintenance_timeout`). |
 | `mode_expert` | Désactive par défaut les confirmations dans le terminal (chaque navigateur peut aussi le régler). |
