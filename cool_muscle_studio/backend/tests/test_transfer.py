@@ -69,14 +69,15 @@ def test_transfer_cancel(tmp_path):
         sim, studio, client = await _setup(tmp_path)
         try:
             await client.post("/api/ponts/banc/maintenance", json={"actif": True})
-            contenu = "\n".join(f"T{i % 8 + 1}.1={i % 100}" for i in range(400)) + "\n"
+            # assez long pour qu'une machine rapide (CI Linux) ne finisse pas avant l'annulation
+            contenu = "\n".join(f"T{i % 8 + 1}.1={i % 100}" for i in range(5000)) + "\n"
             r = await client.post("/api/ponts/banc/transfert", json={"nom": "long.cml", "contenu": contenu})
             assert r.status == 200
             await asyncio.sleep(0.05)
             r = await client.post("/api/ponts/banc/transfert/annuler")
             assert r.status == 200
             st = await _wait_done(client)
-            assert st["etat"] == "annule" and 0 < st["index"] < 400
+            assert st["etat"] == "annule" and 0 < st["index"] < 5000
         finally:
             await _teardown(sim, client)
 

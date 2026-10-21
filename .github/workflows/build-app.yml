@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "cool_muscle_studio/**"
+      - "!cool_muscle_studio/backend/tests/**"
       - ".github/workflows/build-app.yml"
   workflow_dispatch:
 
