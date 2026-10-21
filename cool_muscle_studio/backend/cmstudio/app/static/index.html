@@ -51,6 +51,50 @@
   </section>
 
   <aside class="side">
+    <h2>Commandes rapides</h2>
+    <div class="grid small">
+      <label>Moteur <input id="qc-motor" type="number" min="1" max="15" value="1"></label>
+      <button id="qc-k37" class="btn small" title="Lit K37 pour convertir degrés, tr/min et tr/s² en impulsions">Lire K37</button>
+      <span id="qc-units" class="muted">unités inconnues : lire K37</span>
+    </div>
+    <div class="grid small">
+      <label>Vitesse <input id="qc-rpm" type="number" min="0.1" step="1" value="60"> tr/min</label>
+      <label>Accélération <input id="qc-acc" type="number" min="0.1" step="1" value="10"> tr/s²</label>
+      <label>Couple <input id="qc-torque" type="number" min="0" max="100" value="100"> %</label>
+    </div>
+    <div class="grid small">
+      <label>Position <input id="qc-pos" type="number" step="1" value="180"> °</label>
+      <button id="qc-goto" class="btn small primary" title="P0, S0, A0, M0 puis ^ : position absolue">Aller à</button>
+      <button id="qc-read-pos" class="btn small" title="?96 : position courante">Lire la position</button>
+      <span id="qc-pos-read" class="muted"></span>
+    </div>
+    <div class="grid small">
+      <label>Pas <input id="qc-step" type="number" min="0.01" step="1" value="10"> °</label>
+      <button id="qc-jog-minus" class="btn small" title="Déplacement relatif négatif (P0 en résolution 50 000 puis ~)">◀ Jog −</button>
+      <button id="qc-jog-plus" class="btn small" title="Déplacement relatif positif (P0 en résolution 50 000 puis ~)">Jog + ▶</button>
+    </div>
+    <div class="grid small">
+      <span>Rotation continue</span>
+      <button id="qc-run-ccw" class="btn small" title="P0=1000000000 avec vitesse négative puis ^">◀ Sens −</button>
+      <button id="qc-run-cw" class="btn small" title="P0=1000000000 avec vitesse positive puis ^">Sens + ▶</button>
+      <button id="qc-stop" class="btn small" title="] : arrêt du mouvement">■ Stop</button>
+    </div>
+    <div class="grid small">
+      <button id="qc-enable" class="btn small" title="( : activer le moteur">( Activer</button>
+      <button id="qc-disable" class="btn small" title=") : désactiver (arbre libre)">) Désactiver</button>
+      <button id="qc-home" class="btn small" title="| : recherche d'origine (K42..K48)">| Origine</button>
+      <button id="qc-goto0" class="btn small" title="|1 : aller à la position 0">|1 Aller à 0</button>
+      <button id="qc-set0" class="btn small" title="|2 : la position actuelle devient 0">|2 Origine ici</button>
+    </div>
+    <div id="qc-info" class="small muted">Les commandes de mouvement exigent le mode maintenance.</div>
+
+    <h2>Configuration du moteur</h2>
+    <div class="grid small">
+      <button id="cfg-export" class="btn small primary" title="Lit ?85, ?90, les registres et ?1000, puis enregistre un fichier .cml horodaté dans le dossier des sauvegardes">Exporter la configuration</button>
+      <span id="cfg-info" class="muted">lecture seule, possible en mode normal</span>
+    </div>
+    <ul id="cfg-list" class="list small"></ul>
+
     <h2>Fichier CML</h2>
     <input type="file" id="file-input" accept=".cml,.cmp,.txt" class="small">
     <div id="file-info" class="small muted">Choisir un fichier .cml, .cmp ou .txt : il est analysé avant tout envoi.</div>

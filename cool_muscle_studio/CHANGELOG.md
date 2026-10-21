@@ -1,5 +1,22 @@
 # Journal des modifications
 
+## 0.3.0 (2026-10-21)
+
+- Panneau « Commandes rapides » : lecture de K37 pour convertir degrés,
+  tr/min et tr/s² en impulsions ; aller à une position, jog ± d'un pas,
+  rotation continue dans les deux sens, stop, activer/désactiver, recherche
+  d'origine, aller à 0, origine ici, lecture de la position. Chaque action
+  est une courte séquence envoyée ligne par ligne avec accusé par l'écho, en
+  mode maintenance, avec confirmation (sauf mode expert) et journal.
+- Panneau « Configuration du moteur » : export de la configuration complète
+  (`?85`, `?90`, tous les registres, `?1000`) en fichier `.cml` horodaté
+  réimportable, plus un `.json` avec les lignes brutes, dans
+  `<dossier>/sauvegardes` ; liste et téléchargement des sauvegardes. Lecture
+  seule, possible en mode normal. Les K de liaison (K20, K23, K52, K62, K65,
+  K70) sont exportés en commentaire.
+- Validation : la valeur d'usine documentée d'un K est acceptée même quand la
+  documentation lui donne une plage incompatible (K22, K60, K87, K88).
+
 ## 0.2.0 (2026-10-21)
 
 - Panneau « Fichier CML » : import d'un fichier `.cml`, `.cmp` ou `.txt`,

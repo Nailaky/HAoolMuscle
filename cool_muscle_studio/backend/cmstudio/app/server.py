@@ -22,7 +22,8 @@ from ..sim.server import is_read_only
 from .bridge_client import BridgeClient
 from .config import AppConfig, BridgeConfig
 from .journal import Journal
-from .transfer import Transfer, analyse
+from .motor_ops import export_config, list_backups, read_k37, read_position
+from .transfer import Transfer, analyse, sequence
 
 log = logging.getLogger("cmstudio.app")
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -248,6 +249,101 @@ async def api_transfert_cancel(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+def _motor_id(request: web.Request) -> int:
+    try:
+        mid = int(request.match_info.get("mid", "1"))
+    except ValueError:
+        raise web.HTTPBadRequest(text="identifiant moteur invalide") from None
+    if not 1 <= mid <= 15:
+        raise web.HTTPBadRequest(text="identifiant moteur entre 1 et 15")
+    return mid
+
+
+async def api_k37(request: web.Request) -> web.Response:
+    studio: Studio = request.app["studio"]
+    c = studio.bridge(request.match_info["slug"])
+    if not c.state.connected:
+        raise web.HTTPServiceUnavailable(text="pont non connecté")
+    try:
+        return web.json_response(await read_k37(c, _motor_id(request)))
+    except RuntimeError as exc:
+        raise web.HTTPGatewayTimeout(text=str(exc)) from None
+
+
+async def api_position(request: web.Request) -> web.Response:
+    studio: Studio = request.app["studio"]
+    c = studio.bridge(request.match_info["slug"])
+    if not c.state.connected:
+        raise web.HTTPServiceUnavailable(text="pont non connecté")
+    try:
+        return web.json_response(await read_position(c, _motor_id(request)))
+    except RuntimeError as exc:
+        raise web.HTTPGatewayTimeout(text=str(exc)) from None
+
+
+async def api_sequence(request: web.Request) -> web.Response:
+    """Envoie une courte séquence de commandes (commandes rapides), ligne par ligne avec écho."""
+    studio: Studio = request.app["studio"]
+    slug = request.match_info["slug"]
+    c = studio.bridge(slug)
+    data = await request.json()
+    lignes = [str(l) for l in data.get("lignes", [])]
+    if not lignes or len(lignes) > 20:
+        raise web.HTTPBadRequest(text="entre 1 et 20 lignes")
+    if any(len(l) > 60 for l in lignes):
+        raise web.HTTPBadRequest(text="ligne de plus de 60 caractères")
+    if not c.state.connected:
+        raise web.HTTPServiceUnavailable(text="pont non connecté")
+    ecriture = any(not is_read_only(l) for l in lignes)
+    if ecriture and c.state.mode != "MAINT":
+        raise web.HTTPConflict(text="le pont doit être en mode maintenance pour ces commandes")
+    current = studio.transfers.get(slug)
+    if current is not None and current.running:
+        raise web.HTTPConflict(text="un transfert est déjà en cours")
+    nom = str(data.get("nom", "commande rapide"))
+    t = Transfer(c, sequence(nom, lignes), attendre_echo=bool(data.get("attendre_echo", True)), journal=studio.journal,
+                 utilisateur=_user(request), origine="commande-rapide")
+    studio.transfers[slug] = t
+    t.start()
+    st = await t.wait()
+    return web.json_response({"ok": st.etat == "termine", "transfert": st.to_dict()}, status=200 if st.etat == "termine" else 502)
+
+
+async def api_export(request: web.Request) -> web.Response:
+    studio: Studio = request.app["studio"]
+    c = studio.bridge(request.match_info["slug"])
+    if not c.state.connected:
+        raise web.HTTPServiceUnavailable(text="pont non connecté")
+    mid = _motor_id(request)
+    try:
+        exp, cml_path, json_path = await export_config(c, mid, studio.reference, studio.config.dossier)
+    except RuntimeError as exc:
+        raise web.HTTPBadGateway(text=str(exc)) from None
+    studio.journal.write(c.name, f"EXPORT moteur {mid} -> {cml_path.name}", _user(request), origine="export")
+    return web.json_response({
+        "fichier": cml_path.name, "json": json_path.name, "chemin": str(cml_path),
+        "nb_k": len(exp.k), "nb_registres": sum(len(r) for r in exp.registres.values()),
+        "banques": [b["nom"] for b in exp.banques], "banniere": exp.banniere,
+        "contenu": cml_path.read_text(encoding="utf-8"),
+    })
+
+
+async def api_backups(request: web.Request) -> web.Response:
+    studio: Studio = request.app["studio"]
+    return web.json_response(list_backups(studio.config.dossier))
+
+
+async def api_backup_file(request: web.Request) -> web.Response:
+    studio: Studio = request.app["studio"]
+    nom = request.match_info["nom"]
+    if "/" in nom or "\\" in nom or ".." in nom or not (nom.endswith(".cml") or nom.endswith(".json")):
+        raise web.HTTPBadRequest(text="nom de fichier invalide")
+    p = Path(studio.config.dossier) / "sauvegardes" / nom
+    if not p.is_file():
+        raise web.HTTPNotFound(text="sauvegarde inconnue")
+    return web.FileResponse(p, headers={"Content-Disposition": f'attachment; filename="{nom}"'})
+
+
 async def api_journal(request: web.Request) -> web.Response:
     studio: Studio = request.app["studio"]
     return web.json_response(studio.journal.read(int(request.query.get("limit", "200"))))
@@ -301,6 +397,12 @@ def create_app(config: AppConfig, studio: Studio | None = None) -> web.Applicati
     app.router.add_post("/api/ponts/{slug}/transfert", api_transfert_start)
     app.router.add_get("/api/ponts/{slug}/transfert", api_transfert_state)
     app.router.add_post("/api/ponts/{slug}/transfert/annuler", api_transfert_cancel)
+    app.router.add_get("/api/ponts/{slug}/moteurs/{mid}/k37", api_k37)
+    app.router.add_get("/api/ponts/{slug}/moteurs/{mid}/position", api_position)
+    app.router.add_post("/api/ponts/{slug}/moteurs/{mid}/export", api_export)
+    app.router.add_post("/api/ponts/{slug}/sequence", api_sequence)
+    app.router.add_get("/api/sauvegardes", api_backups)
+    app.router.add_get("/api/sauvegardes/{nom}", api_backup_file)
     app.router.add_get("/api/journal", api_journal)
     app.router.add_static("/static", STATIC_DIR, show_index=False)
 

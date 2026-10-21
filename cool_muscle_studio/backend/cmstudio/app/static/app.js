@@ -387,6 +387,105 @@
     } catch (e) { notify(`transfert refusé : ${e.message}`, true); }
   }
 
+  // ------------------------------------------------------------ commandes rapides
+  const qc = { k37: null, ppr: null, spu: null };
+  const RES_50K = 50000;
+  function qcMotor() { return Math.min(15, Math.max(1, parseInt($("qc-motor").value, 10) || 1)); }
+  async function readK37() {
+    $("qc-units").textContent = "lecture…";
+    try {
+      const r = await getJSON(`api/ponts/${state.slug}/moteurs/${qcMotor()}/k37`);
+      qc.k37 = r.k37; qc.ppr = r.resolution; qc.spu = r.unite_vitesse;
+      $("qc-units").textContent = r.resolution ? `K37=${r.k37} : ${r.resolution} imp/tour, unité de vitesse ${r.unite_vitesse} imp/s` : `K37=${r.k37} : valeur inconnue`;
+    } catch (e) { $("qc-units").textContent = `K37 illisible : ${e.message}`; }
+  }
+  function needUnits() {
+    if (!qc.ppr) { notify("lisez d'abord K37 (bouton « Lire K37 ») pour convertir les unités", true); return false; }
+    return true;
+  }
+  function sVal(rpm) { return Math.round(Math.abs(rpm) * qc.ppr / 60 / qc.spu); }
+  function aVal(acc) { return Math.max(1, Math.min(32767, Math.round(acc * qc.ppr / 1000))); }
+  function motionPrefix(m, signedRpm) {
+    const rpm = parseFloat($("qc-rpm").value) || 0, acc = parseFloat($("qc-acc").value) || 1, tq = Math.max(0, Math.min(100, parseInt($("qc-torque").value, 10) || 100));
+    const s = sVal(rpm) * (signedRpm < 0 ? -1 : 1);
+    return [`S0.${m}=${s}`, `A0.${m}=${aVal(acc)}`, `M0.${m}=${tq}`];
+  }
+  async function runSequence(nom, lignes, danger) {
+    if (!state.pont || !state.pont.connected) { notify("pont non connecté", true); return; }
+    const ecriture = !lignes.every(CML.isReadOnly);
+    if (ecriture && state.pont.mode !== "MAINT") { notify("activez le mode maintenance pour les commandes de mouvement", true); return; }
+    if (ecriture && !state.expert) {
+      $("confirm-title").textContent = danger || "Cette séquence agit sur le moteur";
+      $("confirm-text").textContent = `${nom} : ${lignes.length} ligne(s) envoyée(s) l'une après l'autre.`;
+      $("confirm-line").textContent = lignes.join("\n");
+      $("confirm-warn").classList.add("hidden");
+      const ok = await new Promise((resolve) => { const dlg = $("confirm"); dlg.returnValue = "cancel"; dlg.onclose = () => resolve(dlg.returnValue === "ok"); dlg.showModal(); });
+      if (!ok) return;
+    }
+    $("qc-info").textContent = `${nom}…`;
+    try {
+      const r = await postJSON(`api/ponts/${state.slug}/sequence`, { nom, lignes });
+      $("qc-info").textContent = `${nom} : ${r.transfert.index}/${r.transfert.total} ligne(s) confirmée(s)`;
+    } catch (e) { $("qc-info").textContent = ""; notify(`${nom} : ${e.message}`, true); }
+    loadJournal();
+  }
+  function bindQuickCommands() {
+    $("qc-k37").onclick = readK37;
+    $("qc-motor").onchange = () => { qc.ppr = null; $("qc-units").textContent = "unités inconnues : lire K37"; };
+    $("qc-read-pos").onclick = async () => {
+      try {
+        const r = await getJSON(`api/ponts/${state.slug}/moteurs/${qcMotor()}/position`);
+        $("qc-pos-read").textContent = qc.ppr ? `${(r.pulses * 360 / qc.ppr).toFixed(2)}° (${r.pulses} imp)` : `${r.pulses} imp`;
+      } catch (e) { notify(`position : ${e.message}`, true); }
+    };
+    $("qc-goto").onclick = () => {
+      if (!needUnits()) return;
+      const m = qcMotor(), deg = parseFloat($("qc-pos").value) || 0;
+      runSequence(`aller à ${deg}°`, [...motionPrefix(m, 1), `P0.${m}=${Math.round(deg * qc.ppr / 360)}`, `^.${m}`], "Cette commande fait bouger le moteur");
+    };
+    const jog = (sign) => () => {
+      if (!needUnits()) return;
+      const m = qcMotor(), deg = Math.abs(parseFloat($("qc-step").value) || 0) * sign;
+      runSequence(`jog ${deg > 0 ? "+" : ""}${deg}°`, [...motionPrefix(m, 1), `P0.${m}=${Math.round(deg * RES_50K / 360)}`, `~.${m}`], "Cette commande fait bouger le moteur");
+    };
+    $("qc-jog-plus").onclick = jog(1);
+    $("qc-jog-minus").onclick = jog(-1);
+    const runCont = (sign) => () => {
+      if (!needUnits()) return;
+      const m = qcMotor();
+      runSequence(`rotation continue sens ${sign > 0 ? "+" : "−"}`, [...motionPrefix(m, sign), `P0.${m}=1000000000`, `^.${m}`], "Rotation continue jusqu'à Stop ou arrêt d'urgence");
+    };
+    $("qc-run-cw").onclick = runCont(1);
+    $("qc-run-ccw").onclick = runCont(-1);
+    $("qc-stop").onclick = () => runSequence("stop", [`].${qcMotor()}`], "Arrêt du mouvement");
+    $("qc-enable").onclick = () => runSequence("activer", [`(.${qcMotor()}`], "Activer le moteur peut provoquer un retour en position");
+    $("qc-disable").onclick = () => runSequence("désactiver", [`).${qcMotor()}`], "Désactiver le moteur : l'arbre devient libre");
+    $("qc-home").onclick = () => runSequence("recherche d'origine", [`|.${qcMotor()}`], "La recherche d'origine fait bouger le moteur (K42..K48)");
+    $("qc-goto0").onclick = () => runSequence("aller à 0", [`|1.${qcMotor()}`], "Cette commande fait bouger le moteur");
+    $("qc-set0").onclick = () => runSequence("origine ici", [`|2.${qcMotor()}`], "La position actuelle devient 0");
+  }
+
+  // ------------------------------------------------------------ configuration (export)
+  async function loadBackups() {
+    try {
+      const l = await getJSON("api/sauvegardes");
+      $("cfg-list").innerHTML = l.length ? l.slice(0, 8).map((b) => `<li><a href="${api("api/sauvegardes/" + encodeURIComponent(b.nom))}" download>${CML.esc(b.nom)}</a> <span class="muted">${CML.esc(b.modifie.slice(0, 16).replace("T", " "))}, ${b.taille} o</span></li>`).join("") : '<li class="muted">aucune sauvegarde</li>';
+    } catch (e) { /* ignoré */ }
+  }
+  async function exportConfig() {
+    if (!state.pont || !state.pont.connected) { notify("pont non connecté", true); return; }
+    const m = qcMotor();
+    $("cfg-export").disabled = true;
+    $("cfg-info").textContent = `lecture du moteur ${m} (?85, ?90, registres, ?1000)…`;
+    try {
+      const r = await postJSON(`api/ponts/${state.slug}/moteurs/${m}/export`);
+      $("cfg-info").innerHTML = `<b>${CML.esc(r.fichier)}</b> : ${r.nb_k} K, ${r.nb_registres} registres, banques ${r.banques.length ? r.banques.map(CML.esc).join(", ") : "aucune"} — <a href="${api("api/sauvegardes/" + encodeURIComponent(r.fichier))}" download>télécharger</a>`;
+      loadBackups();
+      loadJournal();
+    } catch (e) { $("cfg-info").textContent = `export impossible : ${e.message}`; }
+    $("cfg-export").disabled = false;
+  }
+
   // ------------------------------------------------------------ initialisation
   function selectBridge(slug) {
     state.slug = slug;
@@ -445,6 +544,9 @@
     $("maint-btn").onclick = toggleMaint;
     $("detect-btn").onclick = detect;
     $("clear-btn").onclick = () => { state.events = []; $("log").innerHTML = ""; };
+    bindQuickCommands();
+    $("cfg-export").onclick = exportConfig;
+    loadBackups();
     $("file-input").onchange = () => { if ($("file-input").files[0]) analyseFile($("file-input").files[0]); };
     $("file-send").onclick = sendFile;
     $("file-cancel").onclick = () => postJSON(`api/ponts/${state.slug}/transfert/annuler`).catch((e) => notify(e.message, true));

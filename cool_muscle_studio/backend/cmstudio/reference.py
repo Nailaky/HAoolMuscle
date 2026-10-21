@@ -83,6 +83,8 @@ class KParam:
     def check(self, value: int) -> list[str]:
         """Retourne la liste des problèmes (vide si la valeur est acceptable)."""
         problems: list[str] = []
+        if self.defaut is not None and value == self.defaut:
+            return problems  # la valeur d'usine est toujours acceptable, même hors plage documentée (K22, K60, K87, K88)
         if self.type == "int":
             if self.min is not None and value < self.min:
                 problems.append(f"K{self.num} : {value} est inférieur au minimum {self.min}")

@@ -49,6 +49,13 @@ class Analysis:
         }
 
 
+def sequence(nom: str, lignes: list[str]) -> Analysis:
+    """Analyse minimale pour une séquence de commandes déjà construites (commandes rapides)."""
+    clean = [(i + 1, l.strip()) for i, l in enumerate(lignes) if l.strip()]
+    return Analysis(nom=nom, lignes=clean, diagnostics=[], banques=[], ecritures_k=[l for _, l in clean if l.upper().startswith("K")],
+                    k37=any(l.upper().startswith("K37") for _, l in clean), sauvegarde=any(l.startswith("$") for _, l in clean))
+
+
 def analyse(nom: str, contenu: str, reference: Reference) -> Analysis:
     """Prétraite (CMP), analyse et valide un fichier ; renvoie les lignes à envoyer."""
     res = compile_cmp(contenu)
@@ -97,9 +104,10 @@ class TransferState:
 class Transfer:
     """Un transfert en cours vers un pont."""
 
-    def __init__(self, bridge: BridgeClient, analysis: Analysis, attendre_echo: bool = True, journal=None, utilisateur: str | None = None) -> None:
+    def __init__(self, bridge: BridgeClient, analysis: Analysis, attendre_echo: bool = True, journal=None, utilisateur: str | None = None, origine: str | None = None) -> None:
         self.bridge = bridge
         self.analysis = analysis
+        self.origine = origine or f"fichier:{analysis.nom}"
         self.state = TransferState(nom=analysis.nom, total=len(analysis.lignes), attendre_echo=attendre_echo)
         self.journal = journal
         self.utilisateur = utilisateur
@@ -148,7 +156,7 @@ class Transfer:
                     st.erreur = f"ligne {n} : pont déconnecté ({exc}) ; {st.index} ligne(s) confirmée(s)"
                     break
                 if self.journal is not None:
-                    self.journal.write(self.bridge.name, line, self.utilisateur, origine=f"fichier:{self.analysis.nom}", ligne_fichier=n)
+                    self.journal.write(self.bridge.name, line, self.utilisateur, origine=self.origine, ligne_fichier=n)
                 ok, err = await self._wait_echo(q, line, SAVE_TIMEOUT if line.lstrip().startswith("$") else ECHO_TIMEOUT)
                 if err:
                     st.etat = "erreur"

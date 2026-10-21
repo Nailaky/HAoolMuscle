@@ -35,6 +35,38 @@ depuis Home Assistant, via un pont ESP32-S3 (ESPHome, composant `cm1_bridge`).
   demandent une confirmation, sauf en mode expert. Toutes les écritures sont
   journalisées dans `<dossier>/journal/AAAA-MM.jsonl`.
 
+## Commandes rapides
+
+Choisir le moteur (1 à 15) puis **Lire K37** : l'app lit la résolution et
+l'unité de vitesse du moteur pour convertir vos valeurs (degrés, tr/min,
+tr/s²) en impulsions. Vitesse, accélération et couple s'appliquent à chaque
+action :
+
+| Bouton | Lignes envoyées |
+|---|---|
+| Aller à | `S0`, `A0`, `M0`, `P0=<position absolue>`, `^` |
+| Jog ± | `S0`, `A0`, `M0`, `P0=<pas en résolution 50 000>`, `~` (déplacement relatif) |
+| Sens + / Sens − | `S0=±vitesse`, `A0`, `M0`, `P0=1000000000`, `^` (rotation continue) |
+| Stop | `]` |
+| ( Activer, ) Désactiver | `(`, `)` |
+| Origine, Aller à 0, Origine ici | `\|`, `\|1`, `\|2` |
+| Lire la position | `?96` |
+
+Les actions de mouvement exigent le mode maintenance et demandent une
+confirmation qui affiche les lignes exactes (sauf mode expert). L'arrêt
+d'urgence reste disponible en permanence dans le bandeau rouge.
+
+## Configuration du moteur
+
+**Exporter la configuration** lit `?85`, `?90`, tous les registres (`?P`,
+`?S`, `?A`, `?M`, `?T`, `?V`, `?N`, `?R`, `?H`) et `?1000`, puis enregistre
+dans `<dossier>/sauvegardes/` un fichier `.cml` horodaté, réimportable par le
+panneau « Fichier CML », et un `.json` qui conserve les lignes brutes reçues.
+Les K de liaison (K20, K23, K52, K62, K65, K70) sont écrits en commentaire
+pour qu'une restauration ne coupe pas le dialogue avec le pont. L'export ne
+fait que lire : il fonctionne en mode normal. Les dernières sauvegardes sont
+listées sous le bouton avec un lien de téléchargement.
+
 ## Fichier CML
 
 Le panneau « Fichier CML » accepte un fichier `.cml`, `.cmp` ou `.txt`. Il
